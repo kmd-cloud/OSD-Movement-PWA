@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#08403C">
+  <meta name="description" content="OSD Connect (Odisha Swabhiman Defender) - A non-political sovereign citizen movement for the dignity, cultural pride, and constitutional rights of Odisha.">
+  <meta name="apple-mobile-web-app-title" content="OSD Connect">
+  <title>OSD Connect</title>
+
+  <!-- PWA Manifest & App Icons -->
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/png" href="./assets/icon-192.png">
+  <link rel="apple-touch-icon" href="./assets/icon-192.png">
+
+  <!-- Fonts: Plus Jakarta Sans, Noto Sans Odia, Cinzel, Material Symbols -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Noto+Sans+Odia:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS v3 via CDN with custom configuration -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: '#00433E',
+            'primary-container': '#0E5C56',
+            'primary-deep': '#08403C',
+            secondary: '#835400',
+            'secondary-container': '#FEB64E',
+            marigold: '#E8A33D',
+            tertiary: '#721926',
+            'tertiary-container': '#91303B',
+            surface: '#FAF6EE',
+            'surface-card': '#FFFDF8',
+            'on-surface': '#201D1A',
+            'outline-border': '#E2DAC8'
+          },
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'Noto Sans Odia', 'sans-serif'],
+            title: ['Cinzel', 'Plus Jakarta Sans', 'serif'],
+            odia: ['Noto Sans Odia', 'sans-serif']
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Base Custom Layout Styles & Native Mobile Optimizations -->
+  <style>
+    @layer base {
+      html, body {
+        width: 100vw;
+        margin: 0;
+        padding: 0;
+        background-color: #FAF6EE;
+        color: #201D1A;
+        font-family: 'Plus Jakarta Sans', 'Noto Sans Odia', sans-serif;
+        -webkit-tap-highlight-color: transparent;
+        overscroll-behavior-y: none;
+      }
+      .pb-safe {
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+      }
+      .pt-safe {
+        padding-top: env(safe-area-inset-top, 0px);
+      }
+    }
+
+    ::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Fallback styles in case CDN is restricted or slow */
+    .bg-osd-deep { background-color: #08403C; }
+    .text-osd-cream { color: #FAF6EE; }
+    .border-osd-gold { border-color: #E8A33D; }
+  </style>
+</head>
+<body class="bg-[#FAF6EE] text-[#201D1A] min-h-screen flex flex-col selection:bg-[#FFDDB5] selection:text-[#2A1800]">
+
+  <!-- Top Global Header (All screens except Splash) -->
+  <header id="main-header" class="fixed top-0 w-full z-50 pt-safe bg-[#08403C] shadow-[0_2px_12px_rgba(0,67,62,0.22)] hidden">
+    <div class="h-16 max-w-[540px] mx-auto px-3.5 flex items-center justify-between gap-2">
+      
+      <!-- Top-Left Branding: Circular Logo Badge, App Name & Motto -->
+      <div class="flex items-center gap-2.5 min-w-0 cursor-pointer" onclick="navigateTo('home')">
+        <img alt="OSD Shield Badge" class="h-9 w-9 rounded-full object-cover flex-shrink-0" style="border: 2px solid #E8A33D; box-shadow: 0 2px 6px rgba(0,0,0,0.25);" src="./assets/osd-badge.png">
+        <div class="flex flex-col min-w-0">
+          <h1 class="text-[#FFFDF8] font-bold text-sm leading-tight truncate tracking-tight font-['Cinzel']">
+            OSD Connect
+          </h1>
+          <span class="text-[#FEB64E] text-[10px] leading-none truncate mt-0.5 font-medium">
+            Ama Swabhiman, Ama Adhikar | ଆମ ସ୍ୱାଭିମାନ...
+          </span>
+        </div>
+      </div>
+
+      <!-- Top-Right Actions: Live EN / ଓଡ଼ିଆ Switcher Pill & User Avatar Button -->
+      <div class="flex items-center gap-1.5 flex-shrink-0">
+        <!-- Bilingual Toggle Button -->
+        <button onclick="toggleLanguage()" class="lang-toggle-btn min-h-[38px] px-2.5 py-1 rounded-full bg-[#0E5C56] text-[#FFFDF8] border border-[#E8A33D]/40 flex items-center justify-center gap-1 active:scale-95 transition-transform text-xs font-semibold" type="button" aria-label="Toggle Language">
+          <span class="material-symbols-outlined text-[16px]">language</span>
+          <span>EN / ଓଡ଼ିଆ</span>
+        </button>
+
+        <!-- User Profile Avatar Button (Generic person icon - NEVER founder photo) -->
+        <button onclick="navigateTo('dashboard')" class="w-9 h-9 rounded-full bg-[#0E5C56] border border-[#FEB64E]/70 flex items-center justify-center text-[#FEB64E] flex-shrink-0 active:scale-95 transition-transform shadow-xs" type="button" aria-label="User Profile">
+          <span class="material-symbols-outlined text-[20px]">person</span>
+        </button>
+      </div>
+    </div>
+    <!-- 2px Marigold divider trim -->
+    <div class="h-[2px] w-full bg-[#E8A33D]"></div>
+  </header>
+
+  <!-- Main Dynamic View Container -->
+  <main id="app-viewport" class="flex-1 w-full relative">
+    <div id="screen-content" class="w-full">
+      <!-- Screens rendered dynamically by app.js (Splash, Home, Roles, Apply, Dashboard, WorkLog, Admin) -->
+    </div>
+  </main>
+
+  <!-- Mandatory Statutory Notice Screen Footer (Every screen except Splash) -->
+  <aside id="global-screen-footer" class="fixed bottom-16 inset-x-0 z-40 bg-[#FAF6EE]/95 backdrop-blur-md px-3 py-1.5 text-center border-t border-[#E2DAC8] shadow-sm hidden">
+    <p class="text-[10px] text-[#3F4947] font-medium leading-tight">
+      Odisha Swabhiman Defender (OSD) is a citizen movement and is not a registered political party.
+    </p>
+  </aside>
+
+  <!-- Bottom Navigation Bar (5 Primary Tabs) -->
+  <nav id="bottom-nav" class="fixed bottom-0 w-full z-50 pb-safe bg-[#FFFDF8]/95 backdrop-blur-xl border-t border-[#E2DAC8] shadow-[0_-4px_20px_rgba(0,0,0,0.06)] hidden">
+    <div class="max-w-[540px] mx-auto flex justify-around items-center h-16 px-1">
+      
+      <!-- Home Tab -->
+      <button onclick="navigateTo('home')" class="nav-tab-item flex flex-col items-center justify-center min-w-[52px] min-h-[48px] py-1 px-1 transition-all active:scale-95 text-[#00433E] font-bold" data-path="home" type="button">
+        <span class="material-symbols-outlined text-[22px]">home</span>
+        <span class="text-[10.5px] mt-0.5">Home</span>
+        <div class="nav-indicator h-0.5 w-6 rounded-full bg-[#E8A33D] transition-all duration-200 mt-0.5"></div>
+      </button>
+
+      <!-- Join Tab -->
+      <button onclick="navigateTo('roles')" class="nav-tab-item flex flex-col items-center justify-center min-w-[52px] min-h-[48px] py-1 px-1 transition-all active:scale-95 text-[#3F4947]" data-path="join" type="button">
+        <span class="material-symbols-outlined text-[22px]">how_to_reg</span>
+        <span class="text-[10.5px] mt-0.5">Join</span>
+        <div class="nav-indicator h-0.5 w-0 rounded-full bg-[#E8A33D] transition-all duration-200 mt-0.5"></div>
+      </button>
+
+      <!-- My ID Tab -->
+      <button onclick="navigateTo('dashboard')" class="nav-tab-item flex flex-col items-center justify-center min-w-[52px] min-h-[48px] py-1 px-1 transition-all active:scale-95 text-[#3F4947]" data-path="dashboard" type="button">
+        <span class="material-symbols-outlined text-[22px]">badge</span>
+        <span class="text-[10.5px] mt-0.5">My ID</span>
+        <div class="nav-indicator h-0.5 w-0 rounded-full bg-[#E8A33D] transition-all duration-200 mt-0.5"></div>
+      </button>
+
+      <!-- Work Log Tab -->
+      <button onclick="navigateTo('work-log')" class="nav-tab-item flex flex-col items-center justify-center min-w-[52px] min-h-[48px] py-1 px-1 transition-all active:scale-95 text-[#3F4947]" data-path="work-log" type="button">
+        <span class="material-symbols-outlined text-[22px]">history_edu</span>
+        <span class="text-[10.5px] mt-0.5">Work Log</span>
+        <div class="nav-indicator h-0.5 w-0 rounded-full bg-[#E8A33D] transition-all duration-200 mt-0.5"></div>
+      </button>
+
+      <!-- Admin Tab -->
+      <button onclick="navigateTo('admin')" class="nav-tab-item flex flex-col items-center justify-center min-w-[52px] min-h-[48px] py-1 px-1 transition-all active:scale-95 text-[#3F4947]" data-path="admin" type="button">
+        <span class="material-symbols-outlined text-[22px]">admin_panel_settings</span>
+        <span class="text-[10.5px] mt-0.5">Admin</span>
+        <div class="nav-indicator h-0.5 w-0 rounded-full bg-[#E8A33D] transition-all duration-200 mt-0.5"></div>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Global Toast Notification Banner -->
+  <div id="global-toast" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[#201D1A] text-[#FAF6EE] px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2 transition-all duration-300 opacity-0 pointer-events-none -translate-y-4 max-w-[90vw]">
+    <span id="global-toast-icon" class="material-symbols-outlined text-[#FEB64E] text-[18px]">info</span>
+    <span id="global-toast-msg" class="text-xs font-semibold"></span>
+  </div>
+
+  <!-- Application Scripts -->
+  <script src="./config.js"></script>
+  <script src="./districts.js"></script>
+  <script src="./qrcode.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

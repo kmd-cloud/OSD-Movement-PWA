@@ -1,0 +1,25 @@
+{
+  "name": "OSD Connect",
+  "short_name": "OSD Connect",
+  "description": "Odisha Swabhiman Defender - A non-political citizen movement for Odisha's heritage, dignity, and constitutional rights.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FAF6EE",
+  "theme_color": "#08403C",
+  "categories": ["social", "civic", "community"],
+  "icons": [
+    {
+      "src": "./assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
