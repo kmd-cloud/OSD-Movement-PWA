@@ -30,17 +30,128 @@ const STATE = {
 
 // API Helper
 async function apiCall(action, data = {}, token = '') {
+  const rawUrl = (typeof CONFIG !== 'undefined' && CONFIG.API_URL) ? String(CONFIG.API_URL).trim() : '';
+
+  // 1. Validate API URL presence
+  if (!rawUrl) {
+    const errorMsg = (typeof t === 'function' && t('alerts.apiNotConfigured')) ||
+      (STATE.lang === 'or' ? 'API URL ବିନ୍ୟାସ ହୋଇନାହିଁ। ଦୟାକରି config.js ଯାଞ୍ଚ କରନ୍ତୁ।' : 'Backend API URL is not configured in config.js.');
+    console.error(`[API Error] Action "${action}" aborted: CONFIG.API_URL is empty.`);
+    return { success: false, error: errorMsg };
+  }
+
+  // 2. Validate URL protocol
+  if (!rawUrl.startsWith('https://')) {
+    const errorMsg = STATE.lang === 'or'
+      ? 'API URL ସୁରକ୍ଷିତ HTTPS ହେବା ଆବଶ୍ୟକ।'
+      : 'Backend API URL must start with https://.';
+    console.error(`[API Error] Action "${action}" aborted: Insecure or malformed URL: ${rawUrl}`);
+    return { success: false, error: errorMsg };
+  }
+
+  // 3. Detect /dev URL mistake
+  if (rawUrl.endsWith('/dev')) {
+    console.warn(`[API Warning] CONFIG.API_URL ends in "/dev". Google Apps Script /dev test deployments require Google Workspace authentication and will fail CORS in frontend apps. Please use the "/exec" deployment URL.`);
+  }
+
+  // 4. Offline check
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    const errorMsg = (typeof t === 'function' && t('alerts.offlineError')) ||
+      (STATE.lang === 'or' ? 'ଆପଣ ବର୍ତ୍ତମାନ ଅଫଲାଇନ୍ ଅଛନ୍ତି। ଦୟାକରି ଆପଣଙ୍କ ଇଣ୍ଟରନେଟ୍ ସଂଯୋଗ ଯାଞ୍ଚ କରନ୍ତୁ।' : 'You are currently offline. Please check your internet connection.');
+    console.warn(`[API Offline] Action "${action}" aborted: Device is offline.`);
+    return { success: false, error: errorMsg, isOffline: true };
+  }
+
   try {
-    const res = await fetch(CONFIG.API_URL, {
+    // We use Content-Type: 'text/plain' without custom headers or complex parameters
+    // to strictly avoid triggering a browser CORS preflight (OPTIONS) request,
+    // which Google Apps Script Web Apps do not support.
+    const res = await fetch(rawUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      mode: 'cors',
+      redirect: 'follow',
+      headers: {
+        'Content-Type': 'text/plain'
+      },
       body: JSON.stringify({ action, token, data })
     });
-    const json = await res.json();
+
+    // 5. Check for HTTP level errors (e.g. 401, 403, 404, 500)
+    if (!res.ok) {
+      let detailMsg = '';
+      try {
+        const errText = await res.text();
+        if (res.status === 401 || res.status === 403 || errText.includes('ServiceLogin') || errText.includes('drive.google.com')) {
+          detailMsg = (STATE.lang === 'or')
+            ? 'ସର୍ଭର ଅନୁମତି ତ୍ରୁଟି: Google Apps Script Web App "Who has access" କୁ "Anyone" ସେଟ୍ କରନ୍ତୁ।'
+            : 'Backend permission error: Google Apps Script Web App must be deployed with "Who has access: Anyone".';
+        } else {
+          detailMsg = `Server returned HTTP ${res.status} (${res.statusText || 'Error'})`;
+        }
+      } catch (_) {
+        detailMsg = `Server returned HTTP ${res.status}`;
+      }
+      console.error(`[API HTTP Error] Action: "${action}", Status: ${res.status}, Message:`, detailMsg);
+      return { success: false, error: detailMsg, httpStatus: res.status };
+    }
+
+    // 6. Safe response text retrieval and JSON parsing
+    const text = await res.text();
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch (parseErr) {
+      console.error(`[API Parse Error] Action: "${action}", Failed to parse JSON response. Raw text:`, text.slice(0, 300));
+      if (text.includes('accounts.google.com') || text.includes('ServiceLogin') || text.includes('drive.google.com')) {
+        const gasMsg = (STATE.lang === 'or')
+          ? 'ସର୍ଭର ପ୍ରବେଶ ଅନୁମତି ଆବଶ୍ୟକ। Google Apps Script ରେ "Who has access" କୁ "Anyone" ସେଟ୍ କରନ୍ତୁ।'
+          : 'Google Apps Script requires authentication. Deploy Web App with "Who has access: Anyone".';
+        return { success: false, error: gasMsg };
+      }
+      const genericMsg = (STATE.lang === 'or')
+        ? 'ସର୍ଭରରୁ ଅବୈଧ ଉତ୍ତର ମିଳିଲା।'
+        : 'Invalid JSON response from server.';
+      return { success: false, error: genericMsg };
+    }
+
     return json;
   } catch (err) {
-    console.error('API Error (' + action + '):', err);
-    return { success: false, error: err.message || 'Network request failed' };
+    console.error(`[API Network/Fetch Error] Action: "${action}":`, err);
+
+    let userFriendlyMsg = '';
+
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      userFriendlyMsg = (typeof t === 'function' && t('alerts.offlineError')) ||
+        (STATE.lang === 'or' ? 'ଆପଣ ବର୍ତ୍ତମାନ ଅଫଲାଇନ୍ ଅଛନ୍ତି। ଦୟାକରି ଇଣ୍ଟରନେଟ୍ ଯାଞ୍ଚ କରନ୍ତୁ।' : 'You are currently offline. Please check your internet connection.');
+    } else if (err.name === 'TypeError' && (err.message === 'Failed to fetch' || err.message.includes('fetch'))) {
+      console.error(
+        `%c[OSD Connect API Diagnostic]%c\n` +
+        `Action: "${action}"\n` +
+        `Endpoint: ${rawUrl}\n` +
+        `Error: "Failed to fetch" (Browser/WebView blocked cross-origin request)\n\n` +
+        `PRIMARY ROOT CAUSES:\n` +
+        `1. Google Apps Script Web App Access Permission:\n` +
+        `   If "Who has access" is set to "Only myself" or restricted to your domain, Google returns a 401 or redirects to accounts.google.com without CORS headers.\n` +
+        `   -> FIX: Open script.google.com -> Deploy -> Manage Deployments -> Edit -> Set "Who has access: Anyone" -> Version: "New version" -> Deploy.\n\n` +
+        `2. Android WebView / Network Security Config:\n` +
+        `   Ensure the device has active internet access and WebView allows secure HTTPS network requests.`,
+        'color: #E8A33D; font-weight: bold; font-size: 13px;',
+        'color: inherit;'
+      );
+
+      userFriendlyMsg = (typeof t === 'function' && t('alerts.serverConnectionError')) ||
+        (STATE.lang === 'or'
+          ? 'ସର୍ଭର ସହିତ ସଂଯୋଗ ହୋଇପାରିଲା ନାହିଁ। ଦୟାକରି ଇଣ୍ଟରନେଟ୍ ଯାଞ୍ଚ କରନ୍ତୁ କିମ୍ବା ସର୍ଭର ବିନ୍ୟାସ ଯାଞ୍ଚ କରନ୍ତୁ।'
+          : 'Unable to connect to server. Please check your internet connection or verify backend deployment.');
+    } else {
+      userFriendlyMsg = err.message || ((typeof t === 'function' && t('alerts.networkError')) || 'Network request failed.');
+    }
+
+    return {
+      success: false,
+      error: userFriendlyMsg,
+      originalError: err.message
+    };
   }
 }
 
@@ -1621,9 +1732,10 @@ async function handleRegisterSubmit() {
   }
 
   const submitBtn = document.getElementById('register-submit-btn');
+  const btnOriginalContent = submitBtn ? submitBtn.innerHTML : '';
   if (submitBtn) {
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">sync</span> Submitting...';
+    submitBtn.innerHTML = `<span class="material-symbols-outlined text-[18px] animate-spin">sync</span> <span>${STATE.lang === 'or' ? 'ଦାଖଲ ହେଉଛି...' : 'Submitting...'}</span>`;
   }
 
   const payload = {
@@ -1651,7 +1763,7 @@ async function handleRegisterSubmit() {
 
   if (submitBtn) {
     submitBtn.disabled = false;
-    submitBtn.innerHTML = '<span class="material-symbols-outlined text-[20px]">how_to_reg</span> Submit Application';
+    submitBtn.innerHTML = btnOriginalContent || `<span class="material-symbols-outlined text-[20px]">how_to_reg</span> <span>${t('application.submitBtn', 'Submit Application')}</span>`;
   }
 
   if (res && res.success) {

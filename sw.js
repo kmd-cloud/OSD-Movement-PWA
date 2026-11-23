@@ -1,4 +1,4 @@
-const CACHE_NAME = 'osd-connect-v1';
+const CACHE_NAME = 'osd-connect-v2';
 const APP_SHELL = [
   './',
   './index.html',
@@ -43,10 +43,19 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // Only handle GET requests in service worker cache
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
   const url = new URL(event.request.url);
 
-  // For API calls to Google Script, do network-only
-  if (url.origin.includes('script.google.com') || url.pathname.includes('/exec')) {
+  // For API calls to Google Script and redirected endpoints, bypass cache
+  if (
+    url.hostname.includes('script.google.com') ||
+    url.hostname.includes('googleusercontent.com') ||
+    url.pathname.includes('/exec')
+  ) {
     return;
   }
 
