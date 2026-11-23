@@ -104,18 +104,31 @@
         </div>
       </div>
 
-      <!-- Top-Right Actions: Live EN / ଓଡ଼ିଆ Switcher Pill & User Avatar Button -->
-      <div class="flex items-center gap-1.5 flex-shrink-0">
+      <!-- Top-Right Actions: Live EN / ଓଡ଼ିଆ Switcher Pill, Header Logout & Profile Avatar Button -->
+      <div class="flex items-center gap-1.5 flex-shrink-0 relative">
         <!-- Bilingual Toggle Button -->
         <button onclick="toggleLanguage()" class="lang-toggle-btn min-h-[38px] px-2.5 py-1 rounded-full bg-[#0E5C56] text-[#FFFDF8] border border-[#E8A33D]/40 flex items-center justify-center gap-1 active:scale-95 transition-transform text-xs font-semibold" type="button" aria-label="Toggle Language">
           <span class="material-symbols-outlined text-[16px]">language</span>
           <span>EN / ଓଡ଼ିଆ</span>
         </button>
 
-        <!-- User Profile Avatar Button (Generic person icon - NEVER founder photo) -->
-        <button onclick="navigateTo('dashboard')" class="w-9 h-9 rounded-full bg-[#0E5C56] border border-[#FEB64E]/70 flex items-center justify-center text-[#FEB64E] flex-shrink-0 active:scale-95 transition-transform shadow-xs" type="button" aria-label="User Profile">
-          <span class="material-symbols-outlined text-[20px]">person</span>
+        <!-- Direct Header Logout Button (visible when member is logged in) -->
+        <button id="header-logout-btn" onclick="handleMemberLogout()" class="hidden min-h-[36px] px-2.5 py-1 rounded-full bg-[#7A1F2B] hover:bg-[#93000A] text-[#FFFDF8] border border-[#E8A33D]/50 flex items-center justify-center gap-1 active:scale-95 transition-all text-xs font-semibold shadow-xs" type="button" aria-label="Log Out">
+          <span class="material-symbols-outlined text-[16px]">logout</span>
+          <span id="header-logout-text" class="text-[11px] font-bold">Log Out</span>
         </button>
+
+        <!-- User Profile Avatar Button (Click opens profile menu if logged in, or goes to dashboard) -->
+        <div class="relative">
+          <button id="header-profile-btn" onclick="handleHeaderProfileClick()" class="w-9 h-9 rounded-full bg-[#0E5C56] border border-[#FEB64E]/70 flex items-center justify-center text-[#FEB64E] flex-shrink-0 active:scale-95 transition-transform shadow-xs overflow-hidden" type="button" aria-label="User Profile">
+            <span id="header-profile-icon" class="material-symbols-outlined text-[20px]">person</span>
+          </button>
+
+          <!-- Header Profile Dropdown Card -->
+          <div id="header-profile-menu" class="hidden absolute right-0 top-12 w-60 bg-[#FFFDF8] rounded-2xl shadow-2xl border border-[#E2DAC8] p-3.5 z-50 text-left space-y-2.5">
+            <!-- Populated dynamically by updateHeaderProfileUI() -->
+          </div>
+        </div>
       </div>
     </div>
     <!-- 2px Marigold divider trim -->

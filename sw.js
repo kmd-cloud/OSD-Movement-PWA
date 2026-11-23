@@ -1,4 +1,4 @@
-const CACHE_NAME = 'osd-connect-v2';
+const CACHE_NAME = 'osd-connect-v3';
 const APP_SHELL = [
   './',
   './index.html',

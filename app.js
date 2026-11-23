@@ -25,7 +25,8 @@ const STATE = {
   adminSummary: null,
   adminAuditLogs: [],
   selectedApplicant: null,
-  selectedPillar: null
+  selectedPillar: null,
+  registrationPhoto: ''
 };
 
 // API Helper
@@ -184,11 +185,118 @@ async function loadTranslations() {
   }
 }
 
+
+// ============================================================================
+// Header Profile Menu & Logout UI Controllers
+// ============================================================================
+function updateHeaderProfileUI() {
+  const logoutBtn = document.getElementById('header-logout-btn');
+  const logoutText = document.getElementById('header-logout-text');
+  const profileBtn = document.getElementById('header-profile-btn');
+  const profileMenu = document.getElementById('header-profile-menu');
+  const tr = STATE.translations[STATE.lang] || {};
+  const headerTr = tr.header || {};
+  const dashTr = tr.dashboard || {};
+
+  if (logoutText) {
+    logoutText.textContent = headerTr.logoutBtn || dashTr.logoutBtn || (STATE.lang === 'or' ? 'ଲଗ୍ ଆଉଟ୍' : 'Log Out');
+  }
+
+  const isMemberLoggedIn = Boolean(STATE.memberToken && STATE.member);
+
+  if (isMemberLoggedIn) {
+    const member = STATE.member;
+    const memberPhoto = member.photo || member.details?.photo || (member.code ? localStorage.getItem('osd_member_photo_' + member.code) : '') || '';
+
+    if (logoutBtn) logoutBtn.classList.remove('hidden');
+
+    if (profileBtn) {
+      if (memberPhoto) {
+        profileBtn.innerHTML = `<img src="${memberPhoto}" alt="${member.name || 'Profile'}" class="w-full h-full object-cover">`;
+      } else {
+        const initial = (member.name || 'M').charAt(0).toUpperCase();
+        profileBtn.innerHTML = `
+          <span class="font-bold text-xs text-[#FEB64E]">${initial}</span>
+          <span class="absolute bottom-0.5 right-0.5 w-2 h-2 rounded-full bg-[#10B981] border border-[#08403C]"></span>
+        `;
+      }
+    }
+
+    if (profileMenu) {
+      const status = member.status || 'Pending';
+      const isApproved = (status === 'Approved');
+      const statusBadge = isApproved 
+        ? '<span class="text-[10px] font-bold text-[#00201D] bg-[#ABEFE7] px-2 py-0.5 rounded-full border border-[#0E5C56]">Approved</span>'
+        : '<span class="text-[10px] font-bold text-[#714800] bg-[#FFDDB5] px-2 py-0.5 rounded-full border border-[#FEB64E]">Pending</span>';
+
+      profileMenu.innerHTML = `
+        <div class="flex items-center gap-2.5 pb-2.5 border-b border-[#EEE7E1]">
+          <div class="w-10 h-10 rounded-full bg-[#00433E] text-[#FEB64E] flex items-center justify-center font-bold text-sm overflow-hidden flex-shrink-0 border border-[#E8A33D]/50">
+            ${memberPhoto ? `<img src="${memberPhoto}" class="w-full h-full object-cover">` : (member.name || 'M').charAt(0).toUpperCase()}
+          </div>
+          <div class="min-w-0 flex-1">
+            <h4 class="text-xs font-bold text-[#1E1B18] truncate">${member.name || 'Member'}</h4>
+            <span class="text-[10.5px] font-mono text-[#0E5C56] font-semibold block">${member.code || ''}</span>
+            <div class="mt-0.5">${statusBadge}</div>
+          </div>
+        </div>
+
+        <div class="space-y-1 pt-1">
+          <button onclick="navigateTo('dashboard'); closeHeaderProfileMenu();" class="w-full py-2 px-2.5 rounded-xl hover:bg-[#FAF2ED] text-xs font-bold text-[#00433E] flex items-center gap-2 transition-all">
+            <span class="material-symbols-outlined text-[18px]">badge</span>
+            <span>${headerTr.myProfile || (STATE.lang === 'or' ? 'ମୋର ପରିଚୟ ଓ ପ୍ରୋଫାଇଲ୍' : 'My ID & Dashboard')}</span>
+          </button>
+          <button onclick="handleMemberLogout()" class="w-full py-2 px-2.5 rounded-xl bg-[#FAF2ED] hover:bg-[#FFDAD6] text-xs font-bold text-[#BA1A1A] flex items-center gap-2 transition-all">
+            <span class="material-symbols-outlined text-[18px]">logout</span>
+            <span>${headerTr.logoutBtn || dashTr.logoutBtn || (STATE.lang === 'or' ? 'ଲଗ୍ ଆଉଟ୍' : 'Log Out')}</span>
+          </button>
+        </div>
+      `;
+    }
+  } else {
+    if (logoutBtn) logoutBtn.classList.add('hidden');
+    if (profileBtn) {
+      profileBtn.innerHTML = '<span id="header-profile-icon" class="material-symbols-outlined text-[20px]">person</span>';
+    }
+    if (profileMenu) {
+      profileMenu.classList.add('hidden');
+    }
+  }
+}
+
+function handleHeaderProfileClick() {
+  if (STATE.memberToken && STATE.member) {
+    const profileMenu = document.getElementById('header-profile-menu');
+    if (profileMenu) {
+      profileMenu.classList.toggle('hidden');
+    }
+  } else {
+    navigateTo('dashboard');
+  }
+}
+
+function closeHeaderProfileMenu() {
+  const profileMenu = document.getElementById('header-profile-menu');
+  if (profileMenu) profileMenu.classList.add('hidden');
+}
+
+// Close header menu on outside click
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', (e) => {
+    const menu = document.getElementById('header-profile-menu');
+    const btn = document.getElementById('header-profile-btn');
+    if (menu && !menu.classList.contains('hidden') && btn && !btn.contains(e.target) && !menu.contains(e.target)) {
+      menu.classList.add('hidden');
+    }
+  });
+}
+
 // Language Switcher
 function setLanguage(lang) {
   STATE.lang = lang;
   localStorage.setItem('osd_lang', lang);
   updateLanguageUI();
+  updateHeaderProfileUI();
   renderCurrentScreen();
 }
 
@@ -224,6 +332,7 @@ function navigateTo(screen, param) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
   renderCurrentScreen();
   updateNavUI();
+  updateHeaderProfileUI();
 }
 
 function updateNavUI() {
@@ -292,11 +401,58 @@ function showToast(message, type = 'info') {
   }, 3200);
 }
 
+
+// ============================================================================
+// Client-Side Image Compression & Resizing Helper
+// ============================================================================
+function compressImage(file, maxWidth = 400, maxHeight = 400, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type.startsWith('image/')) {
+      return reject(new Error('Invalid image file'));
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(dataUrl);
+      };
+      img.onerror = () => reject(new Error('Failed to load image for compression'));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error('Failed to read image file'));
+    reader.readAsDataURL(file);
+  });
+}
+
 // ============================================================================
 // Canvas ID Card & Certificate Renderers
 // ============================================================================
 
-function drawDigitalIdCard(member) {
+function drawDigitalIdCard(member, memberPhoto = '') {
   const canvas = document.getElementById('id-card-canvas');
   const imgTarget = document.getElementById('id-card-img');
   if (!canvas) return;
@@ -390,20 +546,9 @@ function drawDigitalIdCard(member) {
     ctx.lineTo(width - 32, 104);
     ctx.stroke();
 
-    // Member Photo Box / Portrait
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
-    ctx.fillRect(36, 120, 110, 130);
-    ctx.strokeStyle = '#E8A33D';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(36, 120, 110, 130);
-
-    // Initials Avatar in Photo Box
-    ctx.fillStyle = '#E8A33D';
-    ctx.font = 'bold 36px "Plus Jakarta Sans", sans-serif';
-    ctx.textAlign = 'center';
-    const initials = (member.name || 'OSD').split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
-    ctx.fillText(initials, 91, 195);
-    ctx.textAlign = 'left';
+    // Member Photo Box / Portrait coordinates
+    const boxX = 36, boxY = 120, boxW = 110, boxH = 130;
+    const resolvedPhoto = memberPhoto || member.photo || member.details?.photo || (member.code ? localStorage.getItem('osd_member_photo_' + member.code) : '') || '';
 
     // Member Details Block
     ctx.fillStyle = 'rgba(250, 246, 238, 0.7)';
@@ -488,20 +633,80 @@ function drawDigitalIdCard(member) {
       ctx.drawImage(qrCanvas, width - 136, 362, 90, 90);
     }
 
-    // Digital Signature above "Authorized Signatory — OSD Connect"
-    const sigImg = new Image();
-    sigImg.src = './assets/signature.png';
-    sigImg.onload = () => {
-      ctx.drawImage(sigImg, 360, 360, 140, 45);
-      renderSignatoryFooter();
-    };
-    sigImg.onerror = () => {
-      // Fallback stylized signature
+    function drawSignatureAndFinalize() {
+      const sigImg = new Image();
+      sigImg.src = './assets/signature.png';
+      sigImg.onload = () => {
+        ctx.drawImage(sigImg, 360, 360, 140, 45);
+        renderSignatoryFooter();
+      };
+      sigImg.onerror = () => {
+        ctx.fillStyle = '#E8A33D';
+        ctx.font = 'italic 20px "Cinzel", "Times New Roman", serif';
+        ctx.fillText('K. M. Dash', 370, 395);
+        renderSignatoryFooter();
+      };
+    }
+
+    // Draw member photo or initials inside gold frame
+    if (resolvedPhoto) {
+      const photoImg = new Image();
+      photoImg.onload = () => {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(boxX, boxY, boxW, boxH);
+        ctx.clip();
+
+        const imgAspect = photoImg.width / photoImg.height;
+        const boxAspect = boxW / boxH;
+        let drawW = boxW, drawH = boxH, drawX = boxX, drawY = boxY;
+
+        if (imgAspect > boxAspect) {
+          drawH = boxH;
+          drawW = boxH * imgAspect;
+          drawX = boxX + (boxW - drawW) / 2;
+          drawY = boxY;
+        } else {
+          drawW = boxW;
+          drawH = boxW / imgAspect;
+          drawX = boxX;
+          drawY = boxY + (boxH - drawH) / 2;
+        }
+
+        ctx.drawImage(photoImg, drawX, drawY, drawW, drawH);
+        ctx.restore();
+
+        // Crisp Gold Inset Border on photo
+        ctx.strokeStyle = '#E8A33D';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(boxX, boxY, boxW, boxH);
+
+        drawSignatureAndFinalize();
+      };
+      photoImg.onerror = () => {
+        drawInitialsPlaceholder();
+        drawSignatureAndFinalize();
+      };
+      photoImg.src = resolvedPhoto;
+    } else {
+      drawInitialsPlaceholder();
+      drawSignatureAndFinalize();
+    }
+
+    function drawInitialsPlaceholder() {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+      ctx.fillRect(boxX, boxY, boxW, boxH);
+      ctx.strokeStyle = '#E8A33D';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(boxX, boxY, boxW, boxH);
+
       ctx.fillStyle = '#E8A33D';
-      ctx.font = 'italic 20px "Cinzel", "Times New Roman", serif';
-      ctx.fillText('K. M. Dash', 370, 395);
-      renderSignatoryFooter();
-    };
+      ctx.font = 'bold 36px "Plus Jakarta Sans", sans-serif';
+      ctx.textAlign = 'center';
+      const initials = (member.name || 'OSD').split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
+      ctx.fillText(initials, 91, 195);
+      ctx.textAlign = 'left';
+    }
 
     function renderSignatoryFooter() {
       ctx.fillStyle = 'rgba(250, 246, 238, 0.85)';
@@ -514,7 +719,7 @@ function drawDigitalIdCard(member) {
       ctx.fillText('This card is not a political party membership or a government credential.', 36, 442);
       ctx.fillText('(ଏହା କୌଣସି ରାଜନୈତିକ ଦଳର ସଦସ୍ୟତା କିମ୍ବା ସରକାରୀ ପ୍ରମାଣପତ୍ର ନୁହେଁ।)', 36, 458);
 
-      // Convert to crisp image for WebView press-and-hold & sharing
+      // Convert to crisp image for WebView press-and-hold & sharing without CORS taint
       if (imgTarget) {
         imgTarget.src = canvas.toDataURL('image/png');
         imgTarget.alt = 'OSD Connect Digital Identity Card';
@@ -1437,6 +1642,45 @@ function renderApplyScreen() {
             </div>
             <input id="reg-email" type="email" placeholder="${appTr.emailPlaceholder || 'citizen@example.org'}" class="w-full h-11 px-3 rounded-lg bg-[#FAF2ED] text-sm text-[#1E1B18] border border-[#E2DAC8] focus:bg-white focus:outline-none focus:border-[#00433E]">
           </div>
+
+          <!-- Member Passport Photo Selection (Camera / Gallery) -->
+          <div class="pt-2 border-t border-[#EEE7E1]">
+            <div class="flex justify-between items-center mb-1">
+              <label class="text-xs font-bold text-[#1E1B18] flex items-center gap-1">
+                <span class="material-symbols-outlined text-[16px] text-[#835400]">account_box</span>
+                <span>${appTr.photoLabel || 'Passport-Size Photo (ପାସପୋର୍ଟ ଫଟୋ)'}</span>
+              </label>
+              <span class="text-[10px] text-[#0E5C56] font-semibold bg-[#0E5C56]/10 px-2 py-0.5 rounded-full">Recommended</span>
+            </div>
+            <p class="text-[11px] text-[#3F4947] mb-2 leading-tight">
+              ${appTr.photoSub || 'Upload a clear front-facing photo for your official digital identity card.'}
+            </p>
+
+            <input type="file" id="reg-photo-input" accept="image/*" class="hidden" onchange="handleRegistrationPhotoSelect(this)">
+
+            <div class="flex items-center gap-3">
+              <div id="reg-photo-preview-box" class="w-16 h-20 rounded-lg bg-[#FAF2ED] border-2 border-dashed border-[#E8A33D] flex flex-col items-center justify-center text-[#835400] overflow-hidden flex-shrink-0 cursor-pointer shadow-xs" onclick="document.getElementById('reg-photo-input').click()">
+                ${STATE.registrationPhoto 
+                  ? `<img src="${STATE.registrationPhoto}" class="w-full h-full object-cover">`
+                  : `<span class="material-symbols-outlined text-[24px]">add_a_photo</span><span class="text-[8px] font-bold mt-0.5">Upload</span>`
+                }
+              </div>
+              <div class="flex-1 space-y-1">
+                <button type="button" onclick="document.getElementById('reg-photo-input').click()" class="py-2 px-3 rounded-lg bg-[#00433E] hover:bg-[#0E5C56] text-white text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all">
+                  <span class="material-symbols-outlined text-[16px]">photo_camera</span>
+                  <span id="reg-photo-btn-text">${STATE.registrationPhoto ? (appTr.photoChangeBtn || 'Change Photo') : (appTr.photoUploadBtn || 'Select Photo')}</span>
+                </button>
+                <div id="reg-photo-actions" class="${STATE.registrationPhoto ? '' : 'hidden'} flex items-center gap-2">
+                  <button type="button" onclick="removeRegistrationPhoto()" class="text-[11px] text-[#BA1A1A] font-semibold hover:underline">
+                    ${appTr.photoRemoveBtn || 'Remove Photo'}
+                  </button>
+                </div>
+                <p class="text-[10px] text-[#3F4947]">
+                  ${appTr.photoOptionalNotice || 'Recommended now. Required before approved ID card is issued.'}
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Section 2: Cascading Geographic Assignment (All 30 Districts) -->
@@ -1680,6 +1924,52 @@ function togglePasswordView(inputId, btn) {
   }
 }
 
+
+// Handle registration photo selection
+async function handleRegistrationPhotoSelect(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  try {
+    showToast(STATE.lang === 'or' ? 'ଫଟୋ ପ୍ରକ୍ରିୟାକରଣ ହେଉଛି...' : 'Compressing photo...', 'info');
+    const base64 = await compressImage(file, 400, 400, 0.8);
+    STATE.registrationPhoto = base64;
+    const previewBox = document.getElementById('reg-photo-preview-box');
+    if (previewBox) {
+      previewBox.innerHTML = `<img src="${base64}" alt="Selected Photo" class="w-full h-full object-cover">`;
+    }
+    const btnText = document.getElementById('reg-photo-btn-text');
+    if (btnText) {
+      btnText.textContent = t('application.photoChangeBtn', 'Change Photo');
+    }
+    const actions = document.getElementById('reg-photo-actions');
+    if (actions) {
+      actions.classList.remove('hidden');
+    }
+    showToast(t('alerts.photoUploadedSuccess', 'Photo selected and compressed.'), 'info');
+  } catch (err) {
+    console.error('Registration photo error:', err);
+    showToast(t('alerts.photoSizeError', 'Image could not be processed.'), 'error');
+  }
+}
+
+function removeRegistrationPhoto() {
+  STATE.registrationPhoto = '';
+  const input = document.getElementById('reg-photo-input');
+  if (input) input.value = '';
+  const previewBox = document.getElementById('reg-photo-preview-box');
+  if (previewBox) {
+    previewBox.innerHTML = `<span class="material-symbols-outlined text-[24px]">add_a_photo</span><span class="text-[8px] font-bold mt-0.5">Upload</span>`;
+  }
+  const btnText = document.getElementById('reg-photo-btn-text');
+  if (btnText) {
+    btnText.textContent = t('application.photoUploadBtn', 'Select Photo');
+  }
+  const actions = document.getElementById('reg-photo-actions');
+  if (actions) {
+    actions.classList.add('hidden');
+  }
+}
+
 // Handle Registration Submission (action: register)
 async function handleRegisterSubmit() {
   const name = document.getElementById('reg-name')?.value.trim();
@@ -1756,7 +2046,8 @@ async function handleRegisterSubmit() {
     standardDeclaration: true,
     leadershipDeclaration: (STATE.selectedRole === 'OSD-LDR' || STATE.selectedRole === 'OSD-COORD'),
     workingProfessionalDeclaration: Boolean(profDecl),
-    transferConsent: Boolean(transferConsent)
+    transferConsent: Boolean(transferConsent),
+    photo: STATE.registrationPhoto || ''
   };
 
   const res = await apiCall('register', payload);
@@ -1778,8 +2069,14 @@ async function handleRegisterSubmit() {
       district,
       constituency
     };
+    if (STATE.registrationPhoto) {
+      localStorage.setItem('osd_member_photo_' + res.code, STATE.registrationPhoto);
+      if (STATE.member) STATE.member.photo = STATE.registrationPhoto;
+      STATE.registrationPhoto = '';
+    }
     localStorage.setItem('osd_member_token', STATE.memberToken);
     localStorage.setItem('osd_member', JSON.stringify(STATE.member));
+    updateHeaderProfileUI();
     navigateTo('dashboard');
   } else {
     showToast(res && res.error ? res.error : 'Registration submission failed. Please try again.', 'error');
@@ -1842,6 +2139,8 @@ function renderDashboardScreen() {
   const status = member.status || 'Pending';
   const isApproved = (status === 'Approved');
   const isExecutive = ['OSD-FC', 'OSD-PE', 'OSD-AC'].includes(member.type);
+  const memberPhoto = member.photo || member.details?.photo || (member.code ? localStorage.getItem('osd_member_photo_' + member.code) : '') || '';
+  const hasPhoto = Boolean(memberPhoto);
 
   // Status Badge Colors & Info
   let statusBadgeColor = 'bg-[#FFDDB5] text-[#714800] border-[#FEB64E]';
@@ -1891,39 +2190,98 @@ function renderDashboardScreen() {
         ` : ''}
       </div>
 
-      <!-- Digital ID Card Section -->
-      <div class="space-y-2">
-        <div class="flex items-center justify-between px-1">
-          <div>
-            <h3 class="text-sm font-bold text-[#1E1B18]">${dashTr.idCardHeading || 'Digital Identity Card'}</h3>
-            <p class="text-[10px] text-[#3F4947]">${dashTr.idCardSub || 'QR-verified canvas credential'}</p>
+      <!-- Digital ID Card Section (Gated on Approved Members with Photo) -->
+      ${(isApproved && !hasPhoto) ? `
+        <div class="space-y-2">
+          <div class="flex items-center justify-between px-1">
+            <div>
+              <h3 class="text-sm font-bold text-[#1E1B18]">${dashTr.idCardHeading || 'Digital Identity Card'}</h3>
+              <p class="text-[10px] text-[#3F4947]">${dashTr.idCardSub || 'QR-verified canvas credential'}</p>
+            </div>
+            <span class="text-[10px] bg-[#E8A33D]/20 text-[#835400] font-bold px-2 py-0.5 rounded-full border border-[#E8A33D]/50">
+              Action Required
+            </span>
           </div>
-          <span class="text-[10px] bg-[#0E5C56]/10 text-[#00433E] font-bold px-2 py-0.5 rounded-full">
-            ${isApproved ? 'Active' : 'Preview'}
-          </span>
-        </div>
 
-        <!-- Hidden canvas for rendering crisp ID card -->
-        <canvas id="id-card-canvas" class="hidden"></canvas>
+          <div class="bg-[#FFFDF8] rounded-2xl p-5 shadow-sm border-2 border-dashed border-[#E8A33D] space-y-3.5 text-center">
+            <div class="w-16 h-16 rounded-full bg-[#FEB64E]/20 text-[#835400] flex items-center justify-center mx-auto border border-[#E8A33D] shadow-xs">
+              <span class="material-symbols-outlined text-[32px]">add_a_photo</span>
+            </div>
+            <div>
+              <h4 class="text-sm font-bold text-[#1E1B18]">${dashTr.photoRequiredHeading || 'Passport Photo Required to Issue ID Card'}</h4>
+              <p class="text-xs text-[#3F4947] mt-1 leading-relaxed max-w-sm mx-auto">
+                ${dashTr.photoRequiredDesc || 'Your membership application has been approved! Please upload a front-facing passport-style photo to generate and issue your official OSD Digital ID Card.'}
+              </p>
+            </div>
 
-        <!-- Displayed Crisp Image for Mobile WebView (supports press-and-hold to save & sharing) -->
-        <div class="relative rounded-2xl overflow-hidden shadow-lg border border-[#E8A33D]/40 bg-[#08403C]">
-          <img id="id-card-img" alt="OSD Digital ID Card" class="w-full h-auto block" src="">
-        </div>
+            <input type="file" id="member-photo-file-input" accept="image/*" class="hidden" onchange="handleMemberPhotoUpload(this)">
 
-        <!-- Action Buttons for ID Card -->
-        <div class="grid grid-cols-2 gap-2 pt-1">
-          <button onclick="downloadCanvasImage('id-card-canvas', 'OSD_ID_Card_' + (STATE.member.code || 'ID') + '.png')" class="py-2.5 px-3 rounded-xl bg-[#00433E] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow active:scale-95 transition-all">
-            <span class="material-symbols-outlined text-[17px]">download</span>
-            <span>${dashTr.downloadPngBtn || 'Download ID PNG'}</span>
-          </button>
-          <button onclick="shareCredential()" class="py-2.5 px-3 rounded-xl bg-[#FEB64E] text-[#714800] font-bold text-xs flex items-center justify-center gap-1.5 shadow active:scale-95 transition-all">
-            <span class="material-symbols-outlined text-[17px]">share</span>
-            <span>${dashTr.shareCardBtn || 'Share Credential'}</span>
-          </button>
+            <div class="pt-1 max-w-xs mx-auto">
+              <button onclick="document.getElementById('member-photo-file-input').click()" class="w-full py-3 px-4 bg-[#FEB64E] hover:bg-[#E8A33D] text-[#714800] rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
+                <span class="material-symbols-outlined text-[20px]">photo_camera</span>
+                <span>${dashTr.uploadPhotoBtn || 'Upload Passport Photo'}</span>
+              </button>
+              <p class="text-[10.5px] text-[#3F4947] mt-2">
+                ${dashTr.photoUploadTip || 'Photo must be front-facing, clear, and well-lit. Supports camera and gallery.'}
+              </p>
+            </div>
+          </div>
         </div>
-        <p class="text-[10px] text-center text-[#3F4947]">${dashTr.pressToSaveNotice || 'Tip: Tap and hold image on mobile to save directly.'}</p>
-      </div>
+      ` : `
+        <div class="space-y-2">
+          <div class="flex items-center justify-between px-1">
+            <div>
+              <h3 class="text-sm font-bold text-[#1E1B18]">${dashTr.idCardHeading || 'Digital Identity Card'}</h3>
+              <p class="text-[10px] text-[#3F4947]">${dashTr.idCardSub || 'QR-verified canvas credential'}</p>
+            </div>
+            <span class="text-[10px] bg-[#0E5C56]/10 text-[#00433E] font-bold px-2 py-0.5 rounded-full">
+              ${isApproved ? 'Active' : 'Preview'}
+            </span>
+          </div>
+
+          <!-- Hidden canvas for rendering crisp ID card -->
+          <canvas id="id-card-canvas" class="hidden"></canvas>
+
+          <!-- Displayed Crisp Image for Mobile WebView -->
+          <div class="relative rounded-2xl overflow-hidden shadow-lg border border-[#E8A33D]/40 bg-[#08403C]">
+            <img id="id-card-img" alt="OSD Digital ID Card" class="w-full h-auto block" src="">
+          </div>
+
+          <!-- Upload / Change Photo Option -->
+          <input type="file" id="member-photo-file-input" accept="image/*" class="hidden" onchange="handleMemberPhotoUpload(this)">
+          ${hasPhoto ? `
+            <div class="text-center pt-0.5">
+              <button onclick="document.getElementById('member-photo-file-input').click()" class="text-xs text-[#00433E] font-bold hover:underline inline-flex items-center gap-1 py-1 px-3 rounded-lg bg-[#FAF2ED] border border-[#E2DAC8] active:scale-95 transition-all">
+                <span class="material-symbols-outlined text-[15px]">edit</span>
+                <span>${dashTr.changePhotoBtn || 'Change Photo'}</span>
+              </button>
+            </div>
+          ` : `
+            <div class="bg-[#FAF2ED] p-3 rounded-xl border border-[#E8A33D]/40 text-center space-y-1.5">
+              <p class="text-xs font-semibold text-[#835400]">
+                Upload your passport photo now so your ID card can be generated immediately once approved.
+              </p>
+              <button onclick="document.getElementById('member-photo-file-input').click()" class="py-2 px-3 bg-[#00433E] hover:bg-[#0E5C56] text-white rounded-lg font-bold text-xs inline-flex items-center gap-1.5 active:scale-95 transition-all shadow-xs">
+                <span class="material-symbols-outlined text-[16px]">photo_camera</span>
+                <span>${dashTr.uploadPhotoBtn || 'Upload Passport Photo'}</span>
+              </button>
+            </div>
+          `}
+
+          <!-- Action Buttons for ID Card -->
+          <div class="grid grid-cols-2 gap-2 pt-1">
+            <button onclick="downloadCanvasImage('id-card-canvas', 'OSD_ID_Card_' + (STATE.member.code || 'ID') + '.png')" class="py-2.5 px-3 rounded-xl bg-[#00433E] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow active:scale-95 transition-all">
+              <span class="material-symbols-outlined text-[17px]">download</span>
+              <span>${dashTr.downloadPngBtn || 'Download ID PNG'}</span>
+            </button>
+            <button onclick="shareCredential()" class="py-2.5 px-3 rounded-xl bg-[#FEB64E] text-[#714800] font-bold text-xs flex items-center justify-center gap-1.5 shadow active:scale-95 transition-all">
+              <span class="material-symbols-outlined text-[17px]">share</span>
+              <span>${dashTr.shareCardBtn || 'Share Credential'}</span>
+            </button>
+          </div>
+          <p class="text-[10px] text-center text-[#3F4947]">${dashTr.pressToSaveNotice || 'Tip: Tap and hold image on mobile to save directly.'}</p>
+        </div>
+      `}
 
       <!-- Recognition Certificate Section (Unlocked for Executive & Advisory roles) -->
       ${isExecutive ? `
@@ -2029,7 +2387,9 @@ function renderDashboardScreen() {
 
   // Draw the Digital ID Card & Certificate right after DOM is ready
   setTimeout(() => {
-    drawDigitalIdCard(member);
+    if (hasPhoto || !isApproved) {
+      drawDigitalIdCard(member, memberPhoto);
+    }
     if (isExecutive) {
       drawRecognitionCertificate(member);
     }
@@ -2080,12 +2440,54 @@ async function handleMemberLogin() {
   if (res && res.success) {
     STATE.memberToken = res.token;
     STATE.member = res.member;
+    const localPhoto = (STATE.member && STATE.member.code) ? localStorage.getItem('osd_member_photo_' + STATE.member.code) : '';
+    if (localPhoto && !STATE.member.photo && !(STATE.member.details && STATE.member.details.photo)) {
+      STATE.member.photo = localPhoto;
+    } else if (STATE.member && STATE.member.photo && STATE.member.code) {
+      localStorage.setItem('osd_member_photo_' + STATE.member.code, STATE.member.photo);
+    }
     localStorage.setItem('osd_member_token', STATE.memberToken);
     localStorage.setItem('osd_member', JSON.stringify(STATE.member));
+    updateHeaderProfileUI();
     showToast(t('alerts.loginSuccess', 'Logged in successfully.'), 'success');
     renderDashboardScreen();
   } else {
     showToast(res && res.error ? res.error : t('alerts.loginFailed', 'Login failed.'), 'error');
+  }
+}
+
+
+// Handle Member Photo Upload on Dashboard / My ID Screen
+async function handleMemberPhotoUpload(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  try {
+    showToast(STATE.lang === 'or' ? 'ଫଟୋ ପ୍ରକ୍ରିୟାକରଣ ହେଉଛି...' : 'Compressing photo...', 'info');
+    const base64 = await compressImage(file, 400, 400, 0.8);
+
+    if (STATE.member) {
+      STATE.member.photo = base64;
+      if (!STATE.member.details) STATE.member.details = {};
+      STATE.member.details.photo = base64;
+      if (STATE.member.code) {
+        localStorage.setItem('osd_member_photo_' + STATE.member.code, base64);
+      }
+      localStorage.setItem('osd_member', JSON.stringify(STATE.member));
+    }
+
+    // Persist to backend via updateMyProfile (non-blocking)
+    if (STATE.memberToken) {
+      apiCall('updateMyProfile', { photo: base64 }, STATE.memberToken).catch((err) => {
+        console.warn('Backend photo update non-blocking:', err);
+      });
+    }
+
+    showToast(t('alerts.photoUploadedSuccess', 'Photo uploaded and ID card issued successfully!'), 'success');
+    renderDashboardScreen();
+    updateHeaderProfileUI();
+  } catch (err) {
+    console.error('Member photo upload error:', err);
+    showToast(t('alerts.photoSizeError', 'Image could not be processed. Please try another image.'), 'error');
   }
 }
 
@@ -2098,8 +2500,12 @@ async function handleMemberLogout() {
   STATE.member = null;
   localStorage.removeItem('osd_member_token');
   localStorage.removeItem('osd_member');
-  showToast('Logged out of member portal.', 'info');
-  renderDashboardScreen();
+  sessionStorage.clear();
+
+  closeHeaderProfileMenu();
+  updateHeaderProfileUI();
+  showToast(t('alerts.logoutSuccess', 'Logged out successfully.'), 'info');
+  navigateTo('dashboard');
 }
 
 // Update Profile (action: updateMyProfile)

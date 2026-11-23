@@ -289,7 +289,13 @@
     "transferConsentText": "I agree my details may be used by OSD Connect, and may be transferred to a successor political organisation only with my separate consent. (ମୁଁ ସହମତ ଯେ ମୋର ବିବରଣୀ ଓଏସଡି ଦ୍ୱାରା ବ୍ୟବହୃତ ହୋଇପାରିବ ଏବଂ କେବଳ ମୋର ପୃଥକ ସହମତି ସହିତ କୌଣସି ଉତ୍ତରାଧିକାରୀ ରାଜନୈତିକ ସଂଗଠନକୁ ହସ୍ତାନ୍ତର କରାଯାଇପାରିବ।)",
     "submitBtn": "Submit Application / ଦରଖାସ୍ତ ଦାଖଲ କରନ୍ତୁ",
     "noOtpNotice": "No OTP required. Submits directly as Pending admin review.",
-    "loginLinkText": "Already registered? Log in here"
+    "loginLinkText": "Already registered? Log in here",
+    "photoLabel": "Passport Photo (ପାସପୋର୍ଟ ଫଟୋ)",
+    "photoSub": "Upload a clear front-facing photo for your official digital identity card.",
+    "photoUploadBtn": "Choose Photo",
+    "photoChangeBtn": "Change Photo",
+    "photoRemoveBtn": "Remove Photo",
+    "photoOptionalNotice": "Recommended now. Required before approved ID card is issued."
   },
   "dashboard": {
     "title": "Member Portal & Digital ID",
@@ -333,7 +339,13 @@
     "downloadCertBtn": "Download Certificate PNG",
     "pressToSaveNotice": "Tip: Tap and hold image on mobile to save directly.",
     "recentWorkLogs": "Recent Grassroots Work",
-    "viewAllWorkLogs": "Open Work Log Tab"
+    "viewAllWorkLogs": "Open Work Log Tab",
+    "photoRequiredHeading": "Passport Photo Required to Issue ID Card",
+    "photoRequiredDesc": "Your membership application has been approved! Please upload a front-facing passport photo to generate and issue your official OSD Digital ID Card.",
+    "uploadPhotoBtn": "Upload Passport Photo",
+    "changePhotoBtn": "Change Photo",
+    "photoUploadedSuccess": "Photo uploaded and ID card issued successfully!",
+    "photoUploadTip": "Photo must be front-facing, clear, and well-lit. Supports camera and gallery."
   },
   "idCard": {
     "orgTitle": "OSD Connect",
@@ -429,6 +441,14 @@
     "networkError": "Network request error. Please verify your connection.",
     "offlineError": "You are currently offline. Please check your internet connection.",
     "serverConnectionError": "Unable to connect to server. Please check your internet connection or verify backend deployment.",
-    "apiNotConfigured": "Backend API URL is not configured in config.js."
+    "apiNotConfigured": "Backend API URL is not configured in config.js.",
+    "logoutSuccess": "Logged out successfully.",
+    "photoUploadedSuccess": "Passport photo uploaded successfully!",
+    "photoSizeError": "Image could not be processed. Please try another image."
+  },
+  "header": {
+    "logoutBtn": "Log Out",
+    "profileMenu": "Member Menu",
+    "myProfile": "My ID & Profile"
   }
 }
