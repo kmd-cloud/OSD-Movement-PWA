@@ -1,9 +1,10 @@
-const CACHE_NAME = 'osd-connect-v3';
+const CACHE_NAME = 'osd-connect-v4';
 const APP_SHELL = [
   './',
   './index.html',
   './config.js',
   './manifest.json',
+  './odisha-locations.js',
   './districts.js',
   './qrcode.js',
   './app.js',

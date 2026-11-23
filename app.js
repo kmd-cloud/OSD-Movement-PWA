@@ -1701,9 +1701,10 @@ function renderApplyScreen() {
               <label class="block text-xs font-bold text-[#1E1B18] mb-1">${appTr.districtLabel || 'District *'}</label>
               <select id="reg-district" required onchange="handleDistrictChange(this.value)" class="w-full h-11 px-2.5 rounded-lg bg-[#FAF2ED] text-xs font-semibold text-[#1E1B18] border border-[#E2DAC8] focus:outline-none focus:border-[#00433E]">
                 <option value="" disabled selected>${appTr.districtSelectDefault || 'Select District'}</option>
-                ${Object.keys(ODISHA_DISTRICTS).map(d => `
-                  <option value="${d}">${d} (${ODISHA_DISTRICTS_OR[d] || d})</option>
-                `).join('')}
+                ${Object.keys(typeof ODISHA_LOCATIONS !== 'undefined' ? ODISHA_LOCATIONS : ODISHA_DISTRICTS).map(d => {
+                  const orName = (typeof ODISHA_LOCATIONS !== 'undefined' && ODISHA_LOCATIONS[d] && ODISHA_LOCATIONS[d].nameOr) || (typeof ODISHA_DISTRICTS_OR !== 'undefined' && ODISHA_DISTRICTS_OR[d]) || d;
+                  return `<option value="${d}">${d} (${orName})</option>`;
+                }).join('')}
               </select>
             </div>
           </div>
@@ -1715,14 +1716,25 @@ function renderApplyScreen() {
             </select>
           </div>
 
-          <div class="grid grid-cols-2 gap-2.5">
-            <div>
-              <label class="block text-xs font-bold text-[#1E1B18] mb-1">${appTr.blockLabel || 'Block / Municipality *'}</label>
-              <input id="reg-block" required type="text" placeholder="${appTr.blockPlaceholder || 'e.g. BMC / Sadar'}" class="w-full h-11 px-3 rounded-lg bg-[#FAF2ED] text-xs text-[#1E1B18] border border-[#E2DAC8] focus:bg-white focus:outline-none focus:border-[#00433E]">
+          <!-- Cascading Block / Municipality Dropdown with Manual Fallback -->
+          <div>
+            <label class="block text-xs font-bold text-[#1E1B18] mb-1">${appTr.blockLabel || 'Block / Municipality *'}</label>
+            <select id="reg-block-select" required onchange="handleBlockChange(this.value)" class="w-full h-11 px-2.5 rounded-lg bg-[#FAF2ED] text-xs font-semibold text-[#1E1B18] border border-[#E2DAC8] focus:outline-none focus:border-[#00433E]">
+              <option value="" disabled selected>${appTr.selectDistrictFirst || '← Please select District first'}</option>
+            </select>
+            <div id="reg-block-manual-container" class="hidden mt-2">
+              <input id="reg-block-manual" type="text" placeholder="${appTr.manualBlockPlaceholder || 'Type your Block or Municipality name...'}" class="w-full h-11 px-3 rounded-lg bg-[#FAF2ED] text-xs text-[#1E1B18] border border-[#E8A33D] focus:bg-white focus:outline-none focus:border-[#00433E]">
             </div>
-            <div>
-              <label class="block text-xs font-bold text-[#1E1B18] mb-1">${appTr.panchayatLabel || 'Gram Panchayat / Ward *'}</label>
-              <input id="reg-panchayat" required type="text" placeholder="${appTr.panchayatPlaceholder || 'Ward 34 / Patia'}" class="w-full h-11 px-3 rounded-lg bg-[#FAF2ED] text-xs text-[#1E1B18] border border-[#E2DAC8] focus:bg-white focus:outline-none focus:border-[#00433E]">
+          </div>
+
+          <!-- Cascading Gram Panchayat / Ward Dropdown with Manual Fallback -->
+          <div>
+            <label class="block text-xs font-bold text-[#1E1B18] mb-1">${appTr.panchayatLabel || 'Gram Panchayat / Ward *'}</label>
+            <select id="reg-panchayat-select" required onchange="handlePanchayatChange(this.value)" class="w-full h-11 px-2.5 rounded-lg bg-[#FAF2ED] text-xs font-semibold text-[#1E1B18] border border-[#E2DAC8] focus:outline-none focus:border-[#00433E]">
+              <option value="" disabled selected>${appTr.selectBlockFirst || '← Please select Block / Municipality first'}</option>
+            </select>
+            <div id="reg-panchayat-manual-container" class="hidden mt-2">
+              <input id="reg-panchayat-manual" type="text" placeholder="${appTr.manualPanchayatPlaceholder || 'Type your Gram Panchayat or Ward name / number...'}" class="w-full h-11 px-3 rounded-lg bg-[#FAF2ED] text-xs text-[#1E1B18] border border-[#E8A33D] focus:bg-white focus:outline-none focus:border-[#00433E]">
             </div>
           </div>
 
@@ -1858,11 +1870,167 @@ function renderApplyScreen() {
   `;
 }
 
+function toOdiaDigits(num) {
+  const odiaDigits = ['୦', '୧', '୨', '୩', '୪', '୫', '୬', '୭', '୮', '୯'];
+  return String(num).replace(/[0-9]/g, d => odiaDigits[parseInt(d, 10)]);
+}
+
 function handleDistrictChange(district) {
   const constSelect = document.getElementById('reg-constituency');
-  if (!constSelect) return;
-  const list = ODISHA_DISTRICTS[district] || [];
-  constSelect.innerHTML = list.map(c => `<option value="${c}">${c}</option>`).join('');
+  const blockSelect = document.getElementById('reg-block-select');
+  const panchayatSelect = document.getElementById('reg-panchayat-select');
+  const blockManualCont = document.getElementById('reg-block-manual-container');
+  const panchManualCont = document.getElementById('reg-panchayat-manual-container');
+
+  if (blockManualCont) blockManualCont.classList.add('hidden');
+  if (panchManualCont) panchManualCont.classList.add('hidden');
+  const blockManualInput = document.getElementById('reg-block-manual');
+  if (blockManualInput) blockManualInput.value = '';
+  const panchManualInput = document.getElementById('reg-panchayat-manual');
+  if (panchManualInput) panchManualInput.value = '';
+
+  const appTr = (typeof I18N !== 'undefined' && I18N[STATE.lang] && I18N[STATE.lang].application) || {};
+
+  // 1. Populate Constituencies
+  if (constSelect) {
+    const locData = typeof ODISHA_LOCATIONS !== 'undefined' ? ODISHA_LOCATIONS[district] : null;
+    const list = (locData && locData.constituencies) || (typeof ODISHA_DISTRICTS !== 'undefined' ? ODISHA_DISTRICTS[district] : []) || [];
+    const prompt = appTr.constituencySelectDefault || 'Select Constituency';
+    constSelect.innerHTML = `<option value="" disabled selected>${prompt}</option>` + 
+      list.map(c => `<option value="${c}">${c}</option>`).join('');
+  }
+
+  // 2. Populate Blocks & ULBs
+  if (blockSelect) {
+    const locData = typeof ODISHA_LOCATIONS !== 'undefined' ? ODISHA_LOCATIONS[district] : null;
+    if (!locData) {
+      blockSelect.innerHTML = `<option value="" disabled selected>${appTr.blockSelectDefault || 'Select Block / Municipality'}</option>
+        <option value="__OTHER__">${appTr.enterBlockManually || '✏️ Other / Enter Block or Municipality Manually'}</option>`;
+      return;
+    }
+
+    let html = `<option value="" disabled selected>${appTr.blockSelectDefault || 'Select Block / Municipality'}</option>`;
+
+    // Urban Local Bodies
+    if (locData.ulbs && locData.ulbs.length > 0) {
+      html += `<optgroup label="${appTr.ulbOptGroup || 'Urban Local Bodies (Corporation / Municipality / NAC)'}">`;
+      locData.ulbs.forEach(ulb => {
+        const orName = ulb.nameOr ? ` (${ulb.nameOr})` : '';
+        html += `<option value="${ulb.name}">${ulb.name}${orName}</option>`;
+      });
+      html += `</optgroup>`;
+    }
+
+    // Rural CD Blocks
+    if (locData.blocks && locData.blocks.length > 0) {
+      html += `<optgroup label="${appTr.blocksOptGroup || 'Rural CD Blocks (ବ୍ଲକ)'}">`;
+      locData.blocks.forEach(blk => {
+        const orName = blk.nameOr ? ` (${blk.nameOr})` : '';
+        html += `<option value="${blk.name}">${blk.name}${orName}</option>`;
+      });
+      html += `</optgroup>`;
+    }
+
+    // Other / Enter Manually
+    html += `<option value="__OTHER__">${appTr.enterBlockManually || '✏️ Other / Enter Block or Municipality Manually'}</option>`;
+    blockSelect.innerHTML = html;
+  }
+
+  // 3. Reset Panchayat dropdown to prompt
+  if (panchayatSelect) {
+    panchayatSelect.innerHTML = `<option value="" disabled selected>${appTr.selectBlockFirst || '← Please select Block / Municipality first'}</option>`;
+  }
+}
+
+function handleBlockChange(blockVal) {
+  const district = document.getElementById('reg-district')?.value;
+  const panchayatSelect = document.getElementById('reg-panchayat-select');
+  const blockManualCont = document.getElementById('reg-block-manual-container');
+  const panchManualCont = document.getElementById('reg-panchayat-manual-container');
+  const appTr = (typeof I18N !== 'undefined' && I18N[STATE.lang] && I18N[STATE.lang].application) || {};
+
+  // If user selected manual entry for Block
+  if (blockVal === '__OTHER__') {
+    if (blockManualCont) blockManualCont.classList.remove('hidden');
+    document.getElementById('reg-block-manual')?.focus();
+
+    // Also enable manual entry for Panchayat / Ward
+    if (panchayatSelect) {
+      panchayatSelect.innerHTML = `<option value="__OTHER__" selected>${appTr.enterPanchayatManually || '✏️ Other / Enter GP or Ward Manually'}</option>`;
+    }
+    if (panchManualCont) panchManualCont.classList.remove('hidden');
+    return;
+  } else {
+    if (blockManualCont) blockManualCont.classList.add('hidden');
+    const bInput = document.getElementById('reg-block-manual');
+    if (bInput) bInput.value = '';
+  }
+
+  if (!panchayatSelect) return;
+
+  const locData = (typeof ODISHA_LOCATIONS !== 'undefined' && district) ? ODISHA_LOCATIONS[district] : null;
+  if (!locData) {
+    panchayatSelect.innerHTML = `<option value="" disabled selected>${appTr.panchayatSelectDefault || 'Select GP / Ward'}</option>
+      <option value="__OTHER__">${appTr.enterPanchayatManually || '✏️ Other / Enter GP or Ward Manually'}</option>`;
+    return;
+  }
+
+  // Check if selected item is a ULB (Municipal Corporation, Municipality, or NAC)
+  const ulbMatch = (locData.ulbs || []).find(u => u.name === blockVal);
+  if (ulbMatch) {
+    if (panchManualCont) panchManualCont.classList.add('hidden');
+    const pInput = document.getElementById('reg-panchayat-manual');
+    if (pInput) pInput.value = '';
+
+    const wardCount = ulbMatch.wards || 30;
+    let html = `<option value="" disabled selected>${appTr.panchayatSelectDefault || 'Select GP / Ward'}</option>`;
+    html += `<optgroup label="${appTr.wardsOptGroup || 'Wards (ୱାର୍ଡ଼)'}">`;
+    for (let w = 1; w <= wardCount; w++) {
+      const odiaW = toOdiaDigits(w);
+      const label = STATE.lang === 'or' ? `ୱାର୍ଡ଼ ନଂ ${odiaW} (Ward ${w})` : `Ward No. ${w} (ୱାର୍ଡ଼ ${odiaW})`;
+      html += `<option value="Ward No. ${w}">${label}</option>`;
+    }
+    html += `</optgroup>`;
+    html += `<option value="__OTHER__">${appTr.enterPanchayatManually || '✏️ Other / Enter GP or Ward Manually'}</option>`;
+    panchayatSelect.innerHTML = html;
+    return;
+  }
+
+  // Check if selected item is a rural block
+  const blockMatch = (locData.blocks || []).find(b => b.name === blockVal);
+  if (blockMatch) {
+    if (panchManualCont) panchManualCont.classList.add('hidden');
+    const pInput = document.getElementById('reg-panchayat-manual');
+    if (pInput) pInput.value = '';
+
+    let html = `<option value="" disabled selected>${appTr.panchayatSelectDefault || 'Select GP / Ward'}</option>`;
+    if (blockMatch.gps && blockMatch.gps.length > 0) {
+      html += `<optgroup label="${appTr.gpsOptGroup || 'Gram Panchayats (ଗ୍ରାମ ପଞ୍ଚାୟତ)'}">`;
+      blockMatch.gps.forEach(gp => {
+        html += `<option value="${gp} GP">${gp} GP</option>`;
+      });
+      html += `</optgroup>`;
+    }
+    html += `<option value="__OTHER__">${appTr.enterPanchayatManually || '✏️ Other / Enter GP or Ward Manually'}</option>`;
+    panchayatSelect.innerHTML = html;
+    return;
+  }
+
+  // Fallback
+  panchayatSelect.innerHTML = `<option value="" disabled selected>${appTr.panchayatSelectDefault || 'Select GP / Ward'}</option>
+    <option value="__OTHER__">${appTr.enterPanchayatManually || '✏️ Other / Enter GP or Ward Manually'}</option>`;
+}
+
+function handlePanchayatChange(panchVal) {
+  const panchManualCont = document.getElementById('reg-panchayat-manual-container');
+  if (panchVal === '__OTHER__') {
+    if (panchManualCont) panchManualCont.classList.remove('hidden');
+    document.getElementById('reg-panchayat-manual')?.focus();
+  } else {
+    if (panchManualCont) panchManualCont.classList.add('hidden');
+    const pInput = document.getElementById('reg-panchayat-manual');
+    if (pInput) pInput.value = '';
+  }
 }
 
 const ALL_SKILLS = [
@@ -1977,8 +2145,33 @@ async function handleRegisterSubmit() {
   const email = document.getElementById('reg-email')?.value.trim();
   const district = document.getElementById('reg-district')?.value;
   const constituency = document.getElementById('reg-constituency')?.value;
-  const block = document.getElementById('reg-block')?.value.trim();
-  const panchayat = document.getElementById('reg-panchayat')?.value.trim();
+
+  // Extract Block / Municipality (from cascading dropdown or manual fallback)
+  let block = '';
+  const blockSelect = document.getElementById('reg-block-select');
+  if (blockSelect) {
+    if (blockSelect.value === '__OTHER__') {
+      block = document.getElementById('reg-block-manual')?.value.trim() || '';
+    } else {
+      block = blockSelect.value.trim();
+    }
+  } else {
+    block = document.getElementById('reg-block')?.value.trim() || '';
+  }
+
+  // Extract Gram Panchayat / Ward (from cascading dropdown or manual fallback)
+  let panchayat = '';
+  const panchayatSelect = document.getElementById('reg-panchayat-select');
+  if (panchayatSelect) {
+    if (panchayatSelect.value === '__OTHER__') {
+      panchayat = document.getElementById('reg-panchayat-manual')?.value.trim() || '';
+    } else {
+      panchayat = panchayatSelect.value.trim();
+    }
+  } else {
+    panchayat = document.getElementById('reg-panchayat')?.value.trim() || '';
+  }
+
   const village = document.getElementById('reg-village')?.value.trim();
   const occupation = document.getElementById('reg-occupation')?.value;
   const reason = document.getElementById('reg-reason')?.value.trim();
@@ -1992,7 +2185,7 @@ async function handleRegisterSubmit() {
   const isExecutiveRole = (STATE.selectedRole === 'OSD-FC' || STATE.selectedRole === 'OSD-PE');
 
   // Validations
-  if (!name || !phone || !district || !constituency || !password) {
+  if (!name || !phone || !district || !constituency || !block || !panchayat || !password) {
     showToast(t('alerts.fillRequired', 'Please fill in all required fields.'), 'error');
     return;
   }
