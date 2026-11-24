@@ -79,6 +79,15 @@
       scrollbar-width: none;
     }
 
+    /* Header scroll offset for anchor links and smooth scrolling */
+    section, .scroll-section, [id] {
+      scroll-margin-top: calc(5.25rem + env(safe-area-inset-top, 0px));
+    }
+
+    .has-fixed-header {
+      padding-top: calc(4.75rem + env(safe-area-inset-top, 0px));
+    }
+
     /* Fallback styles in case CDN is restricted or slow */
     .bg-osd-deep { background-color: #08403C; }
     .text-osd-cream { color: #FAF6EE; }
@@ -88,7 +97,7 @@
 <body class="bg-[#FAF6EE] text-[#201D1A] min-h-screen flex flex-col selection:bg-[#FFDDB5] selection:text-[#2A1800]">
 
   <!-- Top Global Header (All screens except Splash) -->
-  <header id="main-header" class="fixed top-0 w-full z-50 pt-safe bg-[#08403C] shadow-[0_2px_12px_rgba(0,67,62,0.22)] hidden">
+  <header id="main-header" class="fixed top-0 left-0 right-0 w-full z-50 pt-safe bg-[#08403C] shadow-[0_2px_12px_rgba(0,67,62,0.22)] hidden">
     <div class="h-16 max-w-[540px] mx-auto px-3.5 flex items-center justify-between gap-2">
       
       <!-- Top-Left Branding: Circular Logo Badge, App Name & Motto -->

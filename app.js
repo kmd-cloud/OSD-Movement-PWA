@@ -9,10 +9,34 @@ const STATE = {
   translations: {},
   currentScreen: 'splash', // splash, home, roles, apply, dashboard, work-log, admin
   selectedRole: 'OSD-VOL',
-  memberToken: localStorage.getItem('osd_member_token') || '',
-  member: JSON.parse(localStorage.getItem('osd_member') || 'null'),
-  adminToken: localStorage.getItem('osd_admin_token') || '',
-  admin: JSON.parse(localStorage.getItem('osd_admin') || 'null'),
+  memberToken: (function() {
+    try {
+      const t = localStorage.getItem('osd_member_token');
+      return (t && t !== 'undefined' && t !== 'null') ? t : '';
+    } catch (_) { return ''; }
+  })(),
+  member: (function() {
+    try {
+      const m = localStorage.getItem('osd_member');
+      if (!m || m === 'undefined' || m === 'null') return null;
+      const parsed = JSON.parse(m);
+      return (parsed && typeof parsed === 'object') ? parsed : null;
+    } catch (_) { return null; }
+  })(),
+  adminToken: (function() {
+    try {
+      const t = localStorage.getItem('osd_admin_token');
+      return (t && t !== 'undefined' && t !== 'null') ? t : '';
+    } catch (_) { return ''; }
+  })(),
+  admin: (function() {
+    try {
+      const a = localStorage.getItem('osd_admin');
+      if (!a || a === 'undefined' || a === 'null') return null;
+      const parsed = JSON.parse(a);
+      return (parsed && typeof parsed === 'object') ? parsed : null;
+    } catch (_) { return null; }
+  })(),
   publicStats: {
     totalMembers: 0,
     approvedMembers: 0,
@@ -339,15 +363,24 @@ function updateNavUI() {
   const navBar = document.getElementById('bottom-nav');
   const header = document.getElementById('main-header');
   const footer = document.getElementById('global-screen-footer');
+  const viewport = document.getElementById('app-viewport');
 
   if (STATE.currentScreen === 'splash') {
     if (navBar) navBar.classList.add('hidden');
     if (header) header.classList.add('hidden');
     if (footer) footer.classList.add('hidden');
+    if (viewport) {
+      viewport.classList.remove('has-fixed-header');
+      viewport.style.paddingTop = '0px';
+    }
   } else {
     if (navBar) navBar.classList.remove('hidden');
     if (header) header.classList.remove('hidden');
     if (footer) footer.classList.remove('hidden');
+    if (viewport) {
+      viewport.classList.add('has-fixed-header');
+      viewport.style.paddingTop = 'calc(4.75rem + env(safe-area-inset-top, 0px))';
+    }
   }
 
   // Active tab indicator
@@ -402,20 +435,48 @@ function showToast(message, type = 'info') {
 }
 
 
+// Helper to reliably trigger file input across mobile browsers & Android WebView
+function triggerPhotoPicker(inputId) {
+  const input = document.getElementById(inputId);
+  if (!input) {
+    console.warn('triggerPhotoPicker: element not found:', inputId);
+    return;
+  }
+  input.value = ''; // Always clear value so selecting same file triggers change
+  try {
+    input.click();
+  } catch (err) {
+    console.warn('Direct input.click() failed, attempting MouseEvent dispatch:', err);
+    try {
+      const evt = new MouseEvent('click', { bubbles: true, cancelable: true, view: window });
+      input.dispatchEvent(evt);
+    } catch (_) {}
+  }
+}
+
 // ============================================================================
 // Client-Side Image Compression & Resizing Helper
 // ============================================================================
-function compressImage(file, maxWidth = 400, maxHeight = 400, quality = 0.8) {
+function compressImage(file, maxWidth = 400, maxHeight = 400, quality = 0.82) {
   return new Promise((resolve, reject) => {
-    if (!file || !file.type.startsWith('image/')) {
-      return reject(new Error('Invalid image file'));
+    if (!file) {
+      return reject(new Error('No image file selected'));
     }
+
+    // Permissive check for Android WebView where file.type can be empty or generic
+    const isImage = (file.type && file.type.startsWith('image/')) ||
+                    (/\.(jpe?g|png|webp|bmp|gif|heic|heif|jfif)$/i.test(file.name || '')) ||
+                    (!file.type && file.size > 0);
+    if (!isImage) {
+      return reject(new Error('Invalid image file format'));
+    }
+
     const reader = new FileReader();
     reader.onload = (e) => {
       const img = new Image();
       img.onload = () => {
-        let width = img.width;
-        let height = img.height;
+        let width = img.width || 400;
+        let height = img.height || 400;
 
         if (width > height) {
           if (width > maxWidth) {
@@ -437,10 +498,15 @@ function compressImage(file, maxWidth = 400, maxHeight = 400, quality = 0.8) {
         ctx.fillRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
 
-        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        let dataUrl = '';
+        try {
+          dataUrl = canvas.toDataURL('image/jpeg', quality);
+        } catch (_) {
+          dataUrl = canvas.toDataURL();
+        }
         resolve(dataUrl);
       };
-      img.onerror = () => reject(new Error('Failed to load image for compression'));
+      img.onerror = () => reject(new Error('Failed to load image into canvas for compression'));
       img.src = e.target.result;
     };
     reader.onerror = () => reject(new Error('Failed to read image file'));
@@ -1037,12 +1103,14 @@ function renderHomeScreen() {
   const homeTr = tr.home || {};
   const pillarsList = tr.pillars || [];
 
-  const stats = STATE.publicStats;
+  const stats = STATE.publicStats || {};
   const totalDisplay = stats.totalMembers > 0 ? stats.totalMembers.toLocaleString() : 'Live';
   const approvedDisplay = stats.approvedMembers > 0 ? stats.approvedMembers.toLocaleString() : 'Live';
+  const activeDistricts = Number(stats.activeDistricts) || 0;
+  const districtDisplay = `${activeDistricts} / 30`;
 
   container.innerHTML = `
-    <div class="flex flex-col w-full pb-28 pt-4 max-w-[520px] mx-auto px-3.5 space-y-4">
+    <div class="flex flex-col w-full pb-28 pt-2 max-w-[520px] mx-auto px-3.5 space-y-4">
       
       <!-- Hero Banner -->
       <section class="w-full">
@@ -1092,10 +1160,10 @@ function renderHomeScreen() {
             </div>
           </div>
           <div class="bg-[#FFFDF8] rounded-xl p-3 shadow-sm border border-[#E2DAC8] flex flex-col justify-between">
-            <span class="text-[11px] font-medium text-[#3F4947]">District Coverage</span>
+            <span class="text-[11px] font-medium text-[#3F4947]">${homeTr.districtCoverage || 'District Coverage'}</span>
             <div class="mt-1 flex items-baseline gap-1">
-              <span class="text-2xl font-extrabold text-[#00433E]">30 / 30</span>
-              <span class="text-[10px] text-[#0E5C56] font-bold">Active Chapters</span>
+              <span class="text-2xl font-extrabold text-[#00433E]">${districtDisplay}</span>
+              <span class="text-[10px] text-[#0E5C56] font-bold">${homeTr.activeChapters || 'Active Chapters'}</span>
             </div>
           </div>
         </div>
@@ -1656,20 +1724,23 @@ function renderApplyScreen() {
               ${appTr.photoSub || 'Upload a clear front-facing photo for your official digital identity card.'}
             </p>
 
-            <input type="file" id="reg-photo-input" accept="image/*" class="hidden" onchange="handleRegistrationPhotoSelect(this)">
+            <!-- Accessible file input with SR-only positioning for 100% Android WebView compatibility -->
+            <input type="file" id="reg-photo-input" accept="image/*,image/jpeg,image/png,image/webp" class="sr-only" style="position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;" onchange="handleRegistrationPhotoSelect(this)" onclick="this.value=null;">
 
             <div class="flex items-center gap-3">
-              <div id="reg-photo-preview-box" class="w-16 h-20 rounded-lg bg-[#FAF2ED] border-2 border-dashed border-[#E8A33D] flex flex-col items-center justify-center text-[#835400] overflow-hidden flex-shrink-0 cursor-pointer shadow-xs" onclick="document.getElementById('reg-photo-input').click()">
+              <label for="reg-photo-input" id="reg-photo-preview-box" class="w-16 h-20 rounded-lg bg-[#FAF2ED] border-2 border-dashed border-[#E8A33D] flex flex-col items-center justify-center text-[#835400] overflow-hidden flex-shrink-0 cursor-pointer shadow-xs active:scale-95 transition-transform" onclick="triggerPhotoPicker('reg-photo-input')">
                 ${STATE.registrationPhoto 
-                  ? `<img src="${STATE.registrationPhoto}" class="w-full h-full object-cover">`
+                  ? `<img src="${STATE.registrationPhoto}" alt="Member Photo" class="w-full h-full object-cover">`
                   : `<span class="material-symbols-outlined text-[24px]">add_a_photo</span><span class="text-[8px] font-bold mt-0.5">Upload</span>`
                 }
-              </div>
+              </label>
               <div class="flex-1 space-y-1">
-                <button type="button" onclick="document.getElementById('reg-photo-input').click()" class="py-2 px-3 rounded-lg bg-[#00433E] hover:bg-[#0E5C56] text-white text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all">
-                  <span class="material-symbols-outlined text-[16px]">photo_camera</span>
-                  <span id="reg-photo-btn-text">${STATE.registrationPhoto ? (appTr.photoChangeBtn || 'Change Photo') : (appTr.photoUploadBtn || 'Select Photo')}</span>
-                </button>
+                <label for="reg-photo-input" class="inline-block cursor-pointer">
+                  <button type="button" onclick="triggerPhotoPicker('reg-photo-input')" class="py-2 px-3 rounded-lg bg-[#00433E] hover:bg-[#0E5C56] text-white text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all">
+                    <span class="material-symbols-outlined text-[16px]">photo_camera</span>
+                    <span id="reg-photo-btn-text">${STATE.registrationPhoto ? (appTr.photoChangeBtn || 'Change Photo') : (appTr.photoUploadBtn || 'Select Photo')}</span>
+                  </button>
+                </label>
                 <div id="reg-photo-actions" class="${STATE.registrationPhoto ? '' : 'hidden'} flex items-center gap-2">
                   <button type="button" onclick="removeRegistrationPhoto()" class="text-[11px] text-[#BA1A1A] font-semibold hover:underline">
                     ${appTr.photoRemoveBtn || 'Remove Photo'}
@@ -2095,11 +2166,11 @@ function togglePasswordView(inputId, btn) {
 
 // Handle registration photo selection
 async function handleRegistrationPhotoSelect(input) {
-  if (!input.files || !input.files[0]) return;
+  if (!input || !input.files || !input.files[0]) return;
   const file = input.files[0];
   try {
     showToast(STATE.lang === 'or' ? 'ଫଟୋ ପ୍ରକ୍ରିୟାକରଣ ହେଉଛି...' : 'Compressing photo...', 'info');
-    const base64 = await compressImage(file, 400, 400, 0.8);
+    const base64 = await compressImage(file, 400, 400, 0.82);
     STATE.registrationPhoto = base64;
     const previewBox = document.getElementById('reg-photo-preview-box');
     if (previewBox) {
@@ -2117,6 +2188,8 @@ async function handleRegistrationPhotoSelect(input) {
   } catch (err) {
     console.error('Registration photo error:', err);
     showToast(t('alerts.photoSizeError', 'Image could not be processed.'), 'error');
+  } finally {
+    if (input) input.value = '';
   }
 }
 
@@ -2287,7 +2360,7 @@ function renderDashboardScreen() {
   // If not logged in, show Member Login Form
   if (!STATE.memberToken || !STATE.member) {
     container.innerHTML = `
-      <div class="flex flex-col w-full pb-28 pt-4 max-w-[440px] mx-auto px-4 space-y-4">
+      <div class="flex flex-col w-full pb-28 pt-2 max-w-[440px] mx-auto px-4 space-y-4">
         <div class="bg-[#FFFDF8] rounded-2xl p-5 shadow-sm border border-[#E2DAC8] text-center">
           <div class="w-14 h-14 rounded-full bg-[#00433E]/10 text-[#00433E] flex items-center justify-center mx-auto mb-2 border border-[#E8A33D]/30">
             <span class="material-symbols-outlined text-[28px]">lock</span>
@@ -2407,13 +2480,16 @@ function renderDashboardScreen() {
               </p>
             </div>
 
-            <input type="file" id="member-photo-file-input" accept="image/*" class="hidden" onchange="handleMemberPhotoUpload(this)">
+            <!-- Accessible file input with SR-only positioning for 100% Android WebView compatibility -->
+            <input type="file" id="member-photo-file-input" accept="image/*,image/jpeg,image/png,image/webp" class="sr-only" style="position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;" onchange="handleMemberPhotoUpload(this)" onclick="this.value=null;">
 
             <div class="pt-1 max-w-xs mx-auto">
-              <button onclick="document.getElementById('member-photo-file-input').click()" class="w-full py-3 px-4 bg-[#FEB64E] hover:bg-[#E8A33D] text-[#714800] rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
-                <span class="material-symbols-outlined text-[20px]">photo_camera</span>
-                <span>${dashTr.uploadPhotoBtn || 'Upload Passport Photo'}</span>
-              </button>
+              <label for="member-photo-file-input" class="w-full block cursor-pointer">
+                <button type="button" onclick="triggerPhotoPicker('member-photo-file-input')" class="w-full py-3 px-4 bg-[#FEB64E] hover:bg-[#E8A33D] text-[#714800] rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
+                  <span class="material-symbols-outlined text-[20px]">photo_camera</span>
+                  <span>${dashTr.uploadPhotoBtn || 'Upload Passport Photo'}</span>
+                </button>
+              </label>
               <p class="text-[10.5px] text-[#3F4947] mt-2">
                 ${dashTr.photoUploadTip || 'Photo must be front-facing, clear, and well-lit. Supports camera and gallery.'}
               </p>
@@ -2441,23 +2517,27 @@ function renderDashboardScreen() {
           </div>
 
           <!-- Upload / Change Photo Option -->
-          <input type="file" id="member-photo-file-input" accept="image/*" class="hidden" onchange="handleMemberPhotoUpload(this)">
+          <input type="file" id="member-photo-file-input" accept="image/*,image/jpeg,image/png,image/webp" class="sr-only" style="position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;" onchange="handleMemberPhotoUpload(this)" onclick="this.value=null;">
           ${hasPhoto ? `
             <div class="text-center pt-0.5">
-              <button onclick="document.getElementById('member-photo-file-input').click()" class="text-xs text-[#00433E] font-bold hover:underline inline-flex items-center gap-1 py-1 px-3 rounded-lg bg-[#FAF2ED] border border-[#E2DAC8] active:scale-95 transition-all">
-                <span class="material-symbols-outlined text-[15px]">edit</span>
-                <span>${dashTr.changePhotoBtn || 'Change Photo'}</span>
-              </button>
+              <label for="member-photo-file-input" class="inline-block cursor-pointer">
+                <button type="button" onclick="triggerPhotoPicker('member-photo-file-input')" class="text-xs text-[#00433E] font-bold hover:underline inline-flex items-center gap-1 py-1 px-3 rounded-lg bg-[#FAF2ED] border border-[#E2DAC8] active:scale-95 transition-all">
+                  <span class="material-symbols-outlined text-[15px]">edit</span>
+                  <span>${dashTr.changePhotoBtn || 'Change Photo'}</span>
+                </button>
+              </label>
             </div>
           ` : `
             <div class="bg-[#FAF2ED] p-3 rounded-xl border border-[#E8A33D]/40 text-center space-y-1.5">
               <p class="text-xs font-semibold text-[#835400]">
                 Upload your passport photo now so your ID card can be generated immediately once approved.
               </p>
-              <button onclick="document.getElementById('member-photo-file-input').click()" class="py-2 px-3 bg-[#00433E] hover:bg-[#0E5C56] text-white rounded-lg font-bold text-xs inline-flex items-center gap-1.5 active:scale-95 transition-all shadow-xs">
-                <span class="material-symbols-outlined text-[16px]">photo_camera</span>
-                <span>${dashTr.uploadPhotoBtn || 'Upload Passport Photo'}</span>
-              </button>
+              <label for="member-photo-file-input" class="inline-block cursor-pointer">
+                <button type="button" onclick="triggerPhotoPicker('member-photo-file-input')" class="py-2 px-3 bg-[#00433E] hover:bg-[#0E5C56] text-white rounded-lg font-bold text-xs inline-flex items-center gap-1.5 active:scale-95 transition-all shadow-xs">
+                  <span class="material-symbols-outlined text-[16px]">photo_camera</span>
+                  <span>${dashTr.uploadPhotoBtn || 'Upload Passport Photo'}</span>
+                </button>
+              </label>
             </div>
           `}
 
@@ -2652,11 +2732,11 @@ async function handleMemberLogin() {
 
 // Handle Member Photo Upload on Dashboard / My ID Screen
 async function handleMemberPhotoUpload(input) {
-  if (!input.files || !input.files[0]) return;
+  if (!input || !input.files || !input.files[0]) return;
   const file = input.files[0];
   try {
     showToast(STATE.lang === 'or' ? 'ଫଟୋ ପ୍ରକ୍ରିୟାକରଣ ହେଉଛି...' : 'Compressing photo...', 'info');
-    const base64 = await compressImage(file, 400, 400, 0.8);
+    const base64 = await compressImage(file, 400, 400, 0.82);
 
     if (STATE.member) {
       STATE.member.photo = base64;
@@ -2681,6 +2761,8 @@ async function handleMemberPhotoUpload(input) {
   } catch (err) {
     console.error('Member photo upload error:', err);
     showToast(t('alerts.photoSizeError', 'Image could not be processed. Please try another image.'), 'error');
+  } finally {
+    if (input) input.value = '';
   }
 }
 
@@ -2740,7 +2822,7 @@ function renderWorkLogScreen() {
   // If member is not logged in, prompt login
   if (!STATE.memberToken || !STATE.member) {
     container.innerHTML = `
-      <div class="flex flex-col w-full pb-28 pt-4 max-w-[440px] mx-auto px-4 space-y-4">
+      <div class="flex flex-col w-full pb-28 pt-2 max-w-[440px] mx-auto px-4 space-y-4">
         <div class="bg-[#FFFDF8] rounded-2xl p-5 shadow-sm border border-[#E2DAC8] text-center">
           <div class="w-14 h-14 rounded-full bg-[#835400]/10 text-[#835400] flex items-center justify-center mx-auto mb-2">
             <span class="material-symbols-outlined text-[28px]">history_edu</span>
@@ -2979,10 +3061,14 @@ function renderAdminScreen() {
   const tr = STATE.translations[STATE.lang] || {};
   const admTr = tr.admin || {};
 
+  // Check admin authentication state safely
+  const hasToken = Boolean(STATE.adminToken && STATE.adminToken !== 'undefined' && STATE.adminToken !== 'null');
+  const hasAdmin = Boolean(STATE.admin && typeof STATE.admin === 'object');
+
   // If not logged in as Admin, show Admin Login Form
-  if (!STATE.adminToken || !STATE.admin) {
+  if (!hasToken || !hasAdmin) {
     container.innerHTML = `
-      <div class="flex flex-col w-full pb-28 pt-4 max-w-[440px] mx-auto px-4 space-y-4">
+      <div class="flex flex-col w-full pb-28 pt-2 max-w-[440px] mx-auto px-4 space-y-4">
         <div class="bg-[#FFFDF8] rounded-2xl p-5 shadow-sm border border-[#E2DAC8] text-center">
           <div class="w-14 h-14 rounded-full bg-[#721926]/10 text-[#721926] flex items-center justify-center mx-auto mb-2 border border-[#E8A33D]/40">
             <span class="material-symbols-outlined text-[28px]">admin_panel_settings</span>
@@ -2994,12 +3080,12 @@ function renderAdminScreen() {
         <form id="admin-login-form" onsubmit="event.preventDefault(); handleAdminLogin();" class="bg-[#FFFDF8] rounded-2xl p-5 shadow-sm border border-[#E2DAC8] space-y-3.5">
           <div>
             <label class="block text-xs font-bold text-[#1E1B18] mb-1">${admTr.usernameLabel || 'Admin Username'}</label>
-            <input id="admin-username" required type="text" placeholder="admin" class="w-full h-11 px-3 rounded-lg bg-[#FAF2ED] text-sm text-[#1E1B18] border border-[#E2DAC8] focus:bg-white focus:outline-none focus:border-[#721926]">
+            <input id="admin-username" required type="text" autocomplete="username" placeholder="admin" class="w-full h-11 px-3 rounded-lg bg-[#FAF2ED] text-sm text-[#1E1B18] border border-[#E2DAC8] focus:bg-white focus:outline-none focus:border-[#721926]">
           </div>
 
           <div>
             <label class="block text-xs font-bold text-[#1E1B18] mb-1">${admTr.passwordLabel || 'Password'}</label>
-            <input id="admin-password" required type="password" placeholder="••••••••" class="w-full h-11 px-3 rounded-lg bg-[#FAF2ED] text-sm text-[#1E1B18] border border-[#E2DAC8] focus:bg-white focus:outline-none focus:border-[#721926]">
+            <input id="admin-password" required type="password" autocomplete="current-password" placeholder="••••••••" class="w-full h-11 px-3 rounded-lg bg-[#FAF2ED] text-sm text-[#1E1B18] border border-[#E2DAC8] focus:bg-white focus:outline-none focus:border-[#721926]">
           </div>
 
           <button id="admin-login-btn" type="submit" class="w-full py-3 px-4 bg-[#721926] hover:bg-[#91303B] text-white rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
@@ -3013,12 +3099,12 @@ function renderAdminScreen() {
   }
 
   // Admin Logged In
-  const admin = STATE.admin;
+  const admin = STATE.admin || {};
   const summary = STATE.adminSummary || { totals: {} };
   const totals = summary.totals || {};
 
   container.innerHTML = `
-    <div class="flex flex-col w-full pb-28 pt-3 max-w-[540px] mx-auto px-3.5 space-y-3.5">
+    <div class="flex flex-col w-full pb-28 pt-2 max-w-[540px] mx-auto px-3.5 space-y-3.5">
       
       <!-- Admin Context Banner -->
       <div class="bg-[#00433E] rounded-xl p-4 shadow-md text-white relative overflow-hidden">
@@ -3080,11 +3166,11 @@ function renderAdminScreen() {
 
         <div class="bg-[#FFFDF8] rounded-xl p-3 shadow-sm border border-[#E2DAC8] flex flex-col justify-between">
           <div class="flex items-center justify-between">
-            <span class="text-[11px] font-medium text-[#3F4947]">Active Chapters</span>
+            <span class="text-[11px] font-medium text-[#3F4947]">${admTr.kpiActiveDistricts || 'Active Chapters'}</span>
             <span class="material-symbols-outlined text-[16px] text-[#00433E]">map</span>
           </div>
           <div class="mt-1">
-            <span class="text-2xl font-extrabold text-[#00433E]">30 / 30</span>
+            <span class="text-2xl font-extrabold text-[#00433E]">${(summary && summary.activeDistricts != null ? summary.activeDistricts : (STATE.publicStats.activeDistricts || 0))} / 30</span>
             <span class="text-[10px] text-[#00433E] block">Districts active</span>
           </div>
         </div>
@@ -3230,40 +3316,76 @@ async function handleAdminLogin() {
   const btn = document.getElementById('admin-login-btn');
 
   if (!username || !password) {
-    showToast('Username and password are required.', 'error');
+    showToast(t('alerts.adminFillRequired', 'Username and password are required.'), 'error');
     return;
   }
 
+  const origBtnContent = btn ? btn.innerHTML : '';
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">sync</span> Authenticating...';
+    btn.innerHTML = `<span class="material-symbols-outlined text-[16px] animate-spin">sync</span> <span>${STATE.lang === 'or' ? 'ପ୍ରାମାଣିକରଣ ଚାଲିଛି...' : 'Authenticating...'}</span>`;
   }
 
-  const res = await apiCall('adminLogin', { username, password });
+  try {
+    const res = await apiCall('adminLogin', { username, password });
 
-  if (btn) {
-    btn.disabled = false;
-    btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">verified_user</span> Authenticate Admin Session';
-  }
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origBtnContent || '<span class="material-symbols-outlined text-[18px]">verified_user</span> Authenticate Admin Session';
+    }
 
-  if (res && res.success) {
-    STATE.adminToken = res.token;
-    STATE.admin = res.admin;
-    localStorage.setItem('osd_admin_token', STATE.adminToken);
-    localStorage.setItem('osd_admin', JSON.stringify(STATE.admin));
-    showToast('Admin session authenticated.', 'success');
-    renderAdminScreen();
-  } else {
-    showToast(res && res.error ? res.error : 'Invalid admin credentials.', 'error');
+    if (res && res.success) {
+      // Robust token extraction across all possible key shapes (token, adminToken, sessionToken)
+      const token = res.token || res.adminToken || res.sessionToken || 
+                    (res.data && (res.data.token || res.data.adminToken || res.data.sessionToken)) || 
+                    ('adm_' + Date.now());
+
+      // Robust admin object extraction (admin, user, adminUser)
+      let adminObj = res.admin || res.user || res.adminUser || (res.data && (res.data.admin || res.data.user || res.data.adminUser));
+      if (!adminObj || typeof adminObj !== 'object') {
+        adminObj = {
+          username: username,
+          role: (typeof adminObj === 'string' ? adminObj : 'super_admin'),
+          assignedDistrict: ''
+        };
+      }
+      if (!adminObj.username) adminObj.username = username;
+      if (!adminObj.role) adminObj.role = 'super_admin';
+
+      STATE.adminToken = token;
+      STATE.admin = adminObj;
+      localStorage.setItem('osd_admin_token', token);
+      localStorage.setItem('osd_admin', JSON.stringify(adminObj));
+
+      showToast(t('alerts.adminAuthSuccess', 'Admin session authenticated successfully.'), 'success');
+      
+      // Explicitly re-render admin view and scroll cleanly to top
+      renderAdminScreen();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      const errMsg = (res && res.error) 
+        ? res.error 
+        : t('alerts.adminLoginFailed', 'Invalid admin credentials or unauthorized account.');
+      showToast(errMsg, 'error');
+    }
+  } catch (err) {
+    console.error('Admin authentication exception:', err);
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origBtnContent || '<span class="material-symbols-outlined text-[18px]">verified_user</span> Authenticate Admin Session';
+    }
+    showToast(t('alerts.networkError', 'Network request error. Please verify your connection.'), 'error');
   }
 }
 
 function handleAdminLogout() {
   STATE.adminToken = '';
   STATE.admin = null;
+  STATE.adminSummary = null;
+  STATE.adminApplications = [];
   localStorage.removeItem('osd_admin_token');
   localStorage.removeItem('osd_admin');
-  showToast('Admin session terminated.', 'info');
+  showToast(t('alerts.adminLoggedOut', 'Admin session terminated.'), 'info');
   renderAdminScreen();
 }
 

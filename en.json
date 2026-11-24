@@ -60,7 +60,9 @@
     "registerDefenderBtn": "Register as Swabhiman Defender",
     "zeroFeeBadge": "Zero fee • Direct digital citizen badge",
     "statutoryNoticeTitle": "Statutory Notice:",
-    "statutoryNoticeDesc": "Odisha Swabhiman Defender (OSD) is a citizen movement and is not a registered political party. We do not field electoral candidates."
+    "statutoryNoticeDesc": "Odisha Swabhiman Defender (OSD) is a citizen movement and is not a registered political party. We do not field electoral candidates.",
+    "districtCoverage": "District Coverage",
+    "activeChapters": "Active Chapters"
   },
   "pillars": [
     {
@@ -456,7 +458,11 @@
     "apiNotConfigured": "Backend API URL is not configured in config.js.",
     "logoutSuccess": "Logged out successfully.",
     "photoUploadedSuccess": "Passport photo uploaded successfully!",
-    "photoSizeError": "Image could not be processed. Please try another image."
+    "photoSizeError": "Image could not be processed. Please try another image.",
+    "adminAuthSuccess": "Admin session authenticated successfully.",
+    "adminFillRequired": "Username and password are required.",
+    "adminLoggedOut": "Admin session terminated.",
+    "adminLoginFailed": "Invalid admin credentials or unauthorized account."
   },
   "header": {
     "logoutBtn": "Log Out",
