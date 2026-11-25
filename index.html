@@ -184,9 +184,12 @@
         <div class="nav-indicator h-0.5 w-0 rounded-full bg-[#E8A33D] transition-all duration-200 mt-0.5"></div>
       </button>
 
-      <!-- Admin Tab -->
-      <button onclick="navigateTo('admin')" class="nav-tab-item flex flex-col items-center justify-center min-w-[52px] min-h-[48px] py-1 px-1 transition-all active:scale-95 text-[#3F4947]" data-path="admin" type="button">
-        <span class="material-symbols-outlined text-[22px]">admin_panel_settings</span>
+      <!-- Admin Tab (Restricted) -->
+      <button onclick="navigateTo('admin')" class="nav-tab-item flex flex-col items-center justify-center min-w-[52px] min-h-[48px] py-1 px-1 transition-all active:scale-95 text-[#3F4947]" data-path="admin" type="button" title="Admin • Restricted Access">
+        <div class="relative">
+          <span class="material-symbols-outlined text-[22px]">admin_panel_settings</span>
+          <span class="absolute -top-1 -right-1.5 text-[11px] material-symbols-outlined text-[#E8A33D]">lock</span>
+        </div>
         <span class="text-[10.5px] mt-0.5">Admin</span>
         <div class="nav-indicator h-0.5 w-0 rounded-full bg-[#E8A33D] transition-all duration-200 mt-0.5"></div>
       </button>

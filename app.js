@@ -427,13 +427,22 @@ function showToast(message, type = 'info') {
 
 
 // Helper to reliably trigger file input across mobile browsers & Android WebView
-function triggerPhotoPicker(inputId) {
+// Helper to reliably trigger file input across mobile browsers & Android WebView
+function triggerPhotoPicker(inputId, ev) {
+  if (ev) {
+    if (typeof ev.preventDefault === 'function') ev.preventDefault();
+    if (typeof ev.stopPropagation === 'function') ev.stopPropagation();
+  }
   const input = document.getElementById(inputId);
   if (!input) {
     console.warn('triggerPhotoPicker: element not found:', inputId);
     return;
   }
-  input.value = ''; // Always clear value so selecting same file triggers change
+  // Clear value so selecting same file reliably triggers change
+  try {
+    input.value = '';
+  } catch (_) {}
+
   try {
     input.click();
   } catch (err) {
@@ -447,6 +456,7 @@ function triggerPhotoPicker(inputId) {
 
 // ============================================================================
 // Client-Side Image Compression & Resizing Helper
+// Fast, memory-efficient (supports URL.createObjectURL + FileReader fallback)
 // ============================================================================
 function compressImage(file, maxWidth = 400, maxHeight = 400, quality = 0.82) {
   return new Promise((resolve, reject) => {
@@ -456,18 +466,35 @@ function compressImage(file, maxWidth = 400, maxHeight = 400, quality = 0.82) {
 
     // Permissive check for Android WebView where file.type can be empty or generic
     const isImage = (file.type && file.type.startsWith('image/')) ||
-                    (/\.(jpe?g|png|webp|bmp|gif|heic|heif|jfif)$/i.test(file.name || '')) ||
+                    (/\.(jpe?g|png|webp|bmp|gif|heic|heif|jfif|avif)$/i.test(file.name || '')) ||
                     (!file.type && file.size > 0);
     if (!isImage) {
       return reject(new Error('Invalid image file format'));
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
+    let objectUrl = null;
+    let isObjectUrl = false;
+    try {
+      if (typeof window !== 'undefined' && window.URL && typeof window.URL.createObjectURL === 'function') {
+        objectUrl = window.URL.createObjectURL(file);
+        isObjectUrl = true;
+      }
+    } catch (_) {
+      objectUrl = null;
+    }
+
+    const cleanup = () => {
+      if (isObjectUrl && objectUrl && window.URL && typeof window.URL.revokeObjectURL === 'function') {
+        try { window.URL.revokeObjectURL(objectUrl); } catch (_) {}
+      }
+    };
+
+    const processImgSrc = (srcUrl) => {
       const img = new Image();
       img.onload = () => {
-        let width = img.width || 400;
-        let height = img.height || 400;
+        cleanup();
+        let width = img.naturalWidth || img.width || 400;
+        let height = img.naturalHeight || img.height || 400;
 
         if (width > height) {
           if (width > maxWidth) {
@@ -485,6 +512,9 @@ function compressImage(file, maxWidth = 400, maxHeight = 400, quality = 0.82) {
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          return reject(new Error('Canvas 2D context not available'));
+        }
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
@@ -493,15 +523,43 @@ function compressImage(file, maxWidth = 400, maxHeight = 400, quality = 0.82) {
         try {
           dataUrl = canvas.toDataURL('image/jpeg', quality);
         } catch (_) {
-          dataUrl = canvas.toDataURL();
+          try {
+            dataUrl = canvas.toDataURL('image/png');
+          } catch (_) {
+            dataUrl = canvas.toDataURL();
+          }
         }
         resolve(dataUrl);
       };
-      img.onerror = () => reject(new Error('Failed to load image into canvas for compression'));
-      img.src = e.target.result;
+
+      img.onerror = () => {
+        cleanup();
+        // If object URL failed, attempt FileReader fallback once
+        if (isObjectUrl) {
+          readViaFileReader();
+        } else {
+          reject(new Error('Failed to load image into canvas for compression'));
+        }
+      };
+
+      img.src = srcUrl;
     };
-    reader.onerror = () => reject(new Error('Failed to read image file'));
-    reader.readAsDataURL(file);
+
+    const readViaFileReader = () => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        isObjectUrl = false;
+        processImgSrc(e.target.result);
+      };
+      reader.onerror = () => reject(new Error('Failed to read image file from disk'));
+      reader.readAsDataURL(file);
+    };
+
+    if (objectUrl) {
+      processImgSrc(objectUrl);
+    } else {
+      readViaFileReader();
+    }
   });
 }
 
@@ -605,7 +663,8 @@ function drawDigitalIdCard(member, memberPhoto = '') {
 
     // Member Photo Box / Portrait coordinates
     const boxX = 36, boxY = 120, boxW = 110, boxH = 130;
-    const resolvedPhoto = memberPhoto || member.photo || member.details?.photo || (member.code ? localStorage.getItem('osd_member_photo_' + member.code) : '') || '';
+    const rawResolved = memberPhoto || member.photo || member.details?.photo || (member.code ? localStorage.getItem('osd_member_photo_' + member.code) : '') || '';
+    const resolvedPhoto = (rawResolved && rawResolved !== 'null' && rawResolved !== 'undefined' && rawResolved.length > 20) ? rawResolved : '';
 
     // Member Details Block
     ctx.fillStyle = 'rgba(250, 246, 238, 0.7)';
@@ -1816,23 +1875,21 @@ function renderApplyScreen() {
               ${appTr.photoSub || 'Upload a clear front-facing photo for your official digital identity card.'}
             </p>
 
-            <!-- Accessible file input with SR-only positioning for 100% Android WebView compatibility -->
-            <input type="file" id="reg-photo-input" accept="image/*,image/jpeg,image/png,image/webp" class="sr-only" style="position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;" onchange="handleRegistrationPhotoSelect(this)" onclick="this.value=null;">
+            <!-- Accessible file input with reliable SR-only positioning -->
+            <input type="file" id="reg-photo-input" accept="image/*,image/jpeg,image/png,image/webp" class="sr-only" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0;" onchange="handleRegistrationPhotoSelect(this)">
 
             <div class="flex items-center gap-3">
-              <label for="reg-photo-input" id="reg-photo-preview-box" class="w-16 h-20 rounded-lg bg-[#FAF2ED] border-2 border-dashed border-[#E8A33D] flex flex-col items-center justify-center text-[#835400] overflow-hidden flex-shrink-0 cursor-pointer shadow-xs active:scale-95 transition-transform" onclick="triggerPhotoPicker('reg-photo-input')">
+              <div id="reg-photo-preview-box" onclick="triggerPhotoPicker('reg-photo-input', event)" class="w-16 h-20 rounded-lg bg-[#FAF2ED] border-2 border-dashed border-[#E8A33D] flex flex-col items-center justify-center text-[#835400] overflow-hidden flex-shrink-0 cursor-pointer shadow-xs active:scale-95 transition-transform">
                 ${STATE.registrationPhoto 
                   ? `<img src="${STATE.registrationPhoto}" alt="Member Photo" class="w-full h-full object-cover">`
                   : `<span class="material-symbols-outlined text-[24px]">add_a_photo</span><span class="text-[8px] font-bold mt-0.5">Upload</span>`
                 }
-              </label>
+              </div>
               <div class="flex-1 space-y-1">
-                <label for="reg-photo-input" class="inline-block cursor-pointer">
-                  <button type="button" onclick="triggerPhotoPicker('reg-photo-input')" class="py-2 px-3 rounded-lg bg-[#00433E] hover:bg-[#0E5C56] text-white text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all">
-                    <span class="material-symbols-outlined text-[16px]">photo_camera</span>
-                    <span id="reg-photo-btn-text">${STATE.registrationPhoto ? (appTr.photoChangeBtn || 'Change Photo') : (appTr.photoUploadBtn || 'Select Photo')}</span>
-                  </button>
-                </label>
+                <button type="button" onclick="triggerPhotoPicker('reg-photo-input', event)" class="py-2 px-3 rounded-lg bg-[#00433E] hover:bg-[#0E5C56] text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer">
+                  <span class="material-symbols-outlined text-[16px]">photo_camera</span>
+                  <span id="reg-photo-btn-text">${STATE.registrationPhoto ? (appTr.photoChangeBtn || 'Change Photo') : (appTr.photoUploadBtn || 'Select Photo')}</span>
+                </button>
                 <div id="reg-photo-actions" class="${STATE.registrationPhoto ? '' : 'hidden'} flex items-center gap-2">
                   <button type="button" onclick="removeRegistrationPhoto()" class="text-[11px] text-[#BA1A1A] font-semibold hover:underline">
                     ${appTr.photoRemoveBtn || 'Remove Photo'}
@@ -2503,8 +2560,12 @@ function renderDashboardScreen() {
   const status = member.status || 'Pending';
   const isApproved = (status === 'Approved');
   const isExecutive = ['OSD-FC', 'OSD-PE', 'OSD-AC'].includes(member.type);
-  const memberPhoto = member.photo || member.details?.photo || (member.code ? localStorage.getItem('osd_member_photo_' + member.code) : '') || '';
+  const rawPhoto = member.photo || member.details?.photo || (member.code ? localStorage.getItem('osd_member_photo_' + member.code) : '') || '';
+  const memberPhoto = (rawPhoto && rawPhoto !== 'null' && rawPhoto !== 'undefined' && rawPhoto.length > 20) ? rawPhoto : '';
   const hasPhoto = Boolean(memberPhoto);
+
+  // Non-blocking sync with backend to reflect live status changes (e.g. approval by admin)
+  syncMemberProfile();
 
   // Status Badge Colors & Info
   let statusBadgeColor = 'bg-[#FFDDB5] text-[#714800] border-[#FEB64E]';
@@ -2631,7 +2692,7 @@ function renderDashboardScreen() {
             </div>
 
             <!-- Advance Photo Upload for Immediate Issuance Upon Approval -->
-            <input type="file" id="member-photo-file-input" accept="image/*,image/jpeg,image/png,image/webp" class="sr-only" style="position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;" onchange="handleMemberPhotoUpload(this)" onclick="this.value=null;">
+            <input type="file" id="member-photo-file-input" accept="image/*,image/jpeg,image/png,image/webp" class="sr-only" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0;" onchange="handleMemberPhotoUpload(this)">
             
             ${hasPhoto ? `
               <div class="bg-[#FAF2ED] p-3 rounded-xl border border-[#0E5C56]/30 text-center space-y-2 max-w-sm mx-auto">
@@ -2640,7 +2701,7 @@ function renderDashboardScreen() {
                   <span>${dashTr.photoUploadedReadyBadge || 'Passport photo uploaded — ready for issuance upon approval'}</span>
                 </div>
                 <div>
-                  <button type="button" onclick="triggerPhotoPicker('member-photo-file-input')" class="text-xs text-[#00433E] font-bold hover:underline inline-flex items-center gap-1 py-1 px-3 rounded-lg bg-white border border-[#E2DAC8] active:scale-95 transition-all">
+                  <button type="button" onclick="triggerPhotoPicker('member-photo-file-input', event)" class="text-xs text-[#00433E] font-bold hover:underline inline-flex items-center gap-1 py-1 px-3 rounded-lg bg-white border border-[#E2DAC8] active:scale-95 transition-all cursor-pointer">
                     <span class="material-symbols-outlined text-[14px]">edit</span>
                     <span>${dashTr.changePhotoBtn || 'Change Photo'}</span>
                   </button>
@@ -2651,7 +2712,7 @@ function renderDashboardScreen() {
                 <p class="text-xs font-semibold text-[#835400]">
                   ${dashTr.idCardUploadAdvanceTip || 'Upload your passport photo in advance so your verified credential is generated immediately upon approval.'}
                 </p>
-                <button type="button" onclick="triggerPhotoPicker('member-photo-file-input')" class="py-2.5 px-4 bg-[#FEB64E] hover:bg-[#E8A33D] text-[#714800] rounded-xl font-bold text-xs inline-flex items-center gap-1.5 active:scale-95 transition-all shadow-xs">
+                <button type="button" onclick="triggerPhotoPicker('member-photo-file-input', event)" class="py-2.5 px-4 bg-[#FEB64E] hover:bg-[#E8A33D] text-[#714800] rounded-xl font-bold text-xs inline-flex items-center gap-1.5 active:scale-95 transition-all shadow-xs cursor-pointer">
                   <span class="material-symbols-outlined text-[17px]">photo_camera</span>
                   <span>${dashTr.uploadPhotoBtn || 'Upload Passport Photo'}</span>
                 </button>
@@ -2683,16 +2744,14 @@ function renderDashboardScreen() {
               </p>
             </div>
 
-            <!-- Accessible file input with SR-only positioning for 100% Android WebView compatibility -->
-            <input type="file" id="member-photo-file-input" accept="image/*,image/jpeg,image/png,image/webp" class="sr-only" style="position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;" onchange="handleMemberPhotoUpload(this)" onclick="this.value=null;">
+            <!-- Accessible file input with reliable SR-only positioning -->
+            <input type="file" id="member-photo-file-input" accept="image/*,image/jpeg,image/png,image/webp" class="sr-only" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0;" onchange="handleMemberPhotoUpload(this)">
 
             <div class="pt-1 max-w-xs mx-auto">
-              <label for="member-photo-file-input" class="w-full block cursor-pointer">
-                <button type="button" onclick="triggerPhotoPicker('member-photo-file-input')" class="w-full py-3 px-4 bg-[#FEB64E] hover:bg-[#E8A33D] text-[#714800] rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
-                  <span class="material-symbols-outlined text-[20px]">photo_camera</span>
-                  <span>${dashTr.uploadPhotoBtn || 'Upload Passport Photo'}</span>
-                </button>
-              </label>
+              <button type="button" onclick="triggerPhotoPicker('member-photo-file-input', event)" class="w-full py-3 px-4 bg-[#FEB64E] hover:bg-[#E8A33D] text-[#714800] rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-all cursor-pointer">
+                <span class="material-symbols-outlined text-[20px]">photo_camera</span>
+                <span>${dashTr.uploadPhotoBtn || 'Upload Passport Photo'}</span>
+              </button>
               <p class="text-[10.5px] text-[#3F4947] mt-2">
                 ${dashTr.photoUploadTip || 'Photo must be front-facing, clear, and well-lit. Supports camera and gallery.'}
               </p>
@@ -2721,14 +2780,12 @@ function renderDashboardScreen() {
           </div>
 
           <!-- Upload / Change Photo Option -->
-          <input type="file" id="member-photo-file-input" accept="image/*,image/jpeg,image/png,image/webp" class="sr-only" style="position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;" onchange="handleMemberPhotoUpload(this)" onclick="this.value=null;">
+          <input type="file" id="member-photo-file-input" accept="image/*,image/jpeg,image/png,image/webp" class="sr-only" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0;" onchange="handleMemberPhotoUpload(this)">
           <div class="text-center pt-0.5">
-            <label for="member-photo-file-input" class="inline-block cursor-pointer">
-              <button type="button" onclick="triggerPhotoPicker('member-photo-file-input')" class="text-xs text-[#00433E] font-bold hover:underline inline-flex items-center gap-1 py-1 px-3 rounded-lg bg-[#FAF2ED] border border-[#E2DAC8] active:scale-95 transition-all">
-                <span class="material-symbols-outlined text-[15px]">edit</span>
-                <span>${dashTr.changePhotoBtn || 'Change Photo'}</span>
-              </button>
-            </label>
+            <button type="button" onclick="triggerPhotoPicker('member-photo-file-input', event)" class="text-xs text-[#00433E] font-bold hover:underline inline-flex items-center gap-1 py-1 px-3 rounded-lg bg-[#FAF2ED] border border-[#E2DAC8] active:scale-95 transition-all cursor-pointer">
+              <span class="material-symbols-outlined text-[15px]">edit</span>
+              <span>${dashTr.changePhotoBtn || 'Change Photo'}</span>
+            </button>
           </div>
 
           <!-- Action Buttons for ID Card -->
@@ -3005,6 +3062,40 @@ async function handleMemberLogin() {
   }
 }
 
+
+// Sync Member Profile from Backend (non-blocking status check)
+let isSyncingMember = false;
+async function syncMemberProfile() {
+  if (!STATE.memberToken || isSyncingMember) return;
+  isSyncingMember = true;
+  try {
+    const res = await apiCall('getMyProfile', {}, STATE.memberToken);
+    if (res && res.success && res.member) {
+      const currentStatus = STATE.member ? STATE.member.status : '';
+      const newStatus = res.member.status || currentStatus;
+      const localPhoto = (STATE.member && STATE.member.code) ? localStorage.getItem('osd_member_photo_' + STATE.member.code) : '';
+
+      STATE.member = { ...STATE.member, ...res.member };
+      if (!STATE.member.photo && localPhoto) {
+        STATE.member.photo = localPhoto;
+      }
+      if (STATE.member.photo && STATE.member.code) {
+        localStorage.setItem('osd_member_photo_' + STATE.member.code, STATE.member.photo);
+      }
+      localStorage.setItem('osd_member', JSON.stringify(STATE.member));
+      updateHeaderProfileUI();
+
+      // If status changed while viewing dashboard, re-render to reflect new badge & unlocked ID card
+      if (STATE.currentScreen === 'dashboard' && currentStatus !== newStatus) {
+        renderDashboardScreen();
+      }
+    }
+  } catch (err) {
+    console.warn('syncMemberProfile error:', err);
+  } finally {
+    isSyncingMember = false;
+  }
+}
 
 // Handle Member Photo Upload on Dashboard / My ID Screen
 async function handleMemberPhotoUpload(input) {
@@ -3447,11 +3538,17 @@ function renderAdminScreen() {
   const hasToken = Boolean(STATE.adminToken && STATE.adminToken !== 'undefined' && STATE.adminToken !== 'null');
   const hasAdmin = Boolean(STATE.admin && typeof STATE.admin === 'object');
 
-  // If not logged in as Admin, show Admin Login Form
+  // If not logged in as Admin, show Admin Login Form (Restricted Gate)
   if (!hasToken || !hasAdmin) {
     container.innerHTML = `
       <div class="flex flex-col w-full pb-28 pt-2 max-w-[440px] mx-auto px-4 space-y-4">
+        <!-- Restricted Badge Card -->
         <div class="bg-[#FFFDF8] rounded-2xl p-5 shadow-sm border border-[#E2DAC8] text-center">
+          <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#BA1A1A]/10 text-[#BA1A1A] border border-[#BA1A1A]/20 text-[11px] font-bold uppercase tracking-wider mb-3">
+            <span class="material-symbols-outlined text-[14px]">lock</span>
+            <span>${admTr.restrictedBadge || 'Restricted • Administrative Access Only'}</span>
+          </div>
+
           <div class="w-14 h-14 rounded-full bg-[#721926]/10 text-[#721926] flex items-center justify-center mx-auto mb-2 border border-[#E8A33D]/40">
             <span class="material-symbols-outlined text-[28px]">admin_panel_settings</span>
           </div>
@@ -3459,6 +3556,7 @@ function renderAdminScreen() {
           <p class="text-xs text-[#3F4947] mt-0.5">${admTr.subheading || 'OSD Central Command & District Operations'}</p>
         </div>
 
+        <!-- Admin Login Form -->
         <form id="admin-login-form" onsubmit="event.preventDefault(); handleAdminLogin();" class="bg-[#FFFDF8] rounded-2xl p-5 shadow-sm border border-[#E2DAC8] space-y-3.5">
           <div>
             <label class="block text-xs font-bold text-[#1E1B18] mb-1">${admTr.usernameLabel || 'Admin Username'}</label>
@@ -3470,11 +3568,17 @@ function renderAdminScreen() {
             <input id="admin-password" required type="password" autocomplete="current-password" placeholder="••••••••" class="w-full h-11 px-3 rounded-lg bg-[#FAF2ED] text-sm text-[#1E1B18] border border-[#E2DAC8] focus:bg-white focus:outline-none focus:border-[#721926]">
           </div>
 
-          <button id="admin-login-btn" type="submit" class="w-full py-3 px-4 bg-[#721926] hover:bg-[#91303B] text-white rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
+          <button id="admin-login-btn" type="submit" class="w-full py-3 px-4 bg-[#721926] hover:bg-[#91303B] text-white rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-all cursor-pointer">
             <span class="material-symbols-outlined text-[18px]">verified_user</span>
             <span>${admTr.loginBtn || 'Authenticate Admin Session'}</span>
           </button>
         </form>
+
+        <!-- Restricted Access Notice -->
+        <div class="bg-[#FFF8F4] border border-[#E8A33D]/40 rounded-xl p-3 flex items-start gap-2.5 text-[11px] text-[#714800] leading-relaxed">
+          <span class="material-symbols-outlined text-[#E8A33D] text-[18px] shrink-0 mt-0.5">shield</span>
+          <span>${admTr.restrictedNotice || 'Notice: This portal is strictly restricted to designated State Coordinators and Council Administrators. Unauthorized access is monitored and logged.'}</span>
+        </div>
       </div>
     `;
     return;
@@ -3811,35 +3915,38 @@ function setAdminFilter(f) {
   filterAdminQueue();
 }
 
-function filterAdminQueue() {
+function renderAdminQueueList() {
   const query = document.getElementById('admin-search-input')?.value.toLowerCase().trim() || '';
-  const filtered = STATE.adminApplications.filter(app => {
+  const apps = Array.isArray(STATE.adminApplications) ? STATE.adminApplications : [];
+  const filtered = apps.filter(app => {
     const matchFilter = (currentAdminFilter === 'all' || app.status === currentAdminFilter);
     if (!matchFilter) return false;
     if (!query) return true;
-    const haystack = (app.code + ' ' + app.name + ' ' + app.phone + ' ' + app.district + ' ' + app.type).toLowerCase();
+    const haystack = ((app.code || '') + ' ' + (app.name || '') + ' ' + (app.phone || '') + ' ' + (app.district || '') + ' ' + (app.type || '')).toLowerCase();
     return haystack.includes(query);
   });
 
-  const container = document.getElementById('admin-queue-list');
-  if (!container) return;
-
   if (filtered.length === 0) {
-    container.innerHTML = '<div class="text-center text-xs text-[#3F4947] py-4">No matching applications in queue.</div>';
-    return;
+    const emptyMsg = (apps.length > 0)
+      ? (STATE.lang === 'or' ? 'ଏହି ଫିଲ୍ଟର ସହିତ କୌଣସି ଆବେଦନ ମିଳିଲା ନାହିଁ।' : 'No applications match filter.')
+      : (STATE.lang === 'or' ? 'କୌଣସି ଆବେଦନ ଉପଲବ୍ଧ ନାହିଁ।' : 'No applications in queue.');
+    return `<div class="text-center text-xs text-[#3F4947] py-6 bg-[#FAF2ED] rounded-xl border border-dashed border-[#E2DAC8]">${emptyMsg}</div>`;
   }
 
-  container.innerHTML = filtered.map(app => {
-    let statusColor = 'bg-[#FFDDB5] text-[#714800]';
-    if (app.status === 'Approved') statusColor = 'bg-[#ABEFE7] text-[#00201D]';
-    else if (app.status === 'Rejected') statusColor = 'bg-[#FFDAD6] text-[#93000A]';
+  return filtered.map(app => {
+    let statusColor = 'bg-[#FFDDB5] text-[#714800] border-[#FEB64E]';
+    if (app.status === 'Approved') statusColor = 'bg-[#ABEFE7] text-[#00201D] border-[#0E5C56]';
+    else if (app.status === 'Rejected') statusColor = 'bg-[#FFDAD6] text-[#93000A] border-[#BA1A1A]';
+    else if (app.status === 'Under Verification') statusColor = 'bg-[#FFF8F4] text-[#835400] border-[#E8A33D]';
+    const hasRoleChange = Boolean(app.details?.requestedRole);
 
     return `
-      <div onclick="openApplicantDossier('${app.code}')" class="bg-[#FAF2ED] p-3 rounded-xl border border-[#E2DAC8] cursor-pointer hover:border-[#00433E] transition-all space-y-1.5">
+      <div onclick="openApplicantDossier('${app.code}')" class="bg-[#FAF2ED] p-3 rounded-xl border border-[#E2DAC8] hover:border-[#00433E] active:scale-[0.99] transition-all space-y-1.5 cursor-pointer shadow-xs">
         <div class="flex items-center justify-between text-xs">
           <div class="flex items-center gap-1.5 min-w-0">
             <span class="font-bold text-[#1E1B18] truncate">${app.name}</span>
-            <span class="text-[10px] font-bold px-1.5 py-0.2 rounded ${statusColor}">${app.status}</span>
+            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded border ${statusColor}">${app.status}</span>
+            ${hasRoleChange ? `<span class="text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-[#FFDDB5] text-[#714800] border border-[#FEB64E]">Role Change</span>` : ''}
           </div>
           <span class="font-mono text-[10.5px] text-[#0E5C56] font-bold flex-shrink-0">${app.code}</span>
         </div>
@@ -3852,6 +3959,13 @@ function filterAdminQueue() {
       </div>
     `;
   }).join('');
+}
+
+function filterAdminQueue() {
+  const container = document.getElementById('admin-queue-list');
+  if (container) {
+    container.innerHTML = renderAdminQueueList();
+  }
 }
 
 // Applicant Dossier Modal (adminGetApplication)

@@ -463,7 +463,11 @@
     "actorCol": "Admin User",
     "actionCol": "Action",
     "targetCol": "Target",
-    "detailsCol": "Details"
+    "detailsCol": "Details",
+    "restrictedBadge": "Restricted • Administrative Access Only",
+    "restrictedTag": "Admin Only",
+    "restrictedNotice": "Notice: This portal is strictly restricted to designated State Coordinators and Council Administrators. Unauthorized access is monitored and logged.",
+    "restrictedNav": "Admin (Restricted)"
   },
   "alerts": {
     "fillRequired": "Please fill in all required fields.",
