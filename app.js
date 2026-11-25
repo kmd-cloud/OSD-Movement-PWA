@@ -214,25 +214,17 @@ async function loadTranslations() {
 // Header Profile Menu & Logout UI Controllers
 // ============================================================================
 function updateHeaderProfileUI() {
-  const logoutBtn = document.getElementById('header-logout-btn');
-  const logoutText = document.getElementById('header-logout-text');
   const profileBtn = document.getElementById('header-profile-btn');
   const profileMenu = document.getElementById('header-profile-menu');
   const tr = STATE.translations[STATE.lang] || {};
   const headerTr = tr.header || {};
   const dashTr = tr.dashboard || {};
 
-  if (logoutText) {
-    logoutText.textContent = headerTr.logoutBtn || dashTr.logoutBtn || (STATE.lang === 'or' ? 'ଲଗ୍ ଆଉଟ୍' : 'Log Out');
-  }
-
   const isMemberLoggedIn = Boolean(STATE.memberToken && STATE.member);
 
   if (isMemberLoggedIn) {
     const member = STATE.member;
     const memberPhoto = member.photo || member.details?.photo || (member.code ? localStorage.getItem('osd_member_photo_' + member.code) : '') || '';
-
-    if (logoutBtn) logoutBtn.classList.remove('hidden');
 
     if (profileBtn) {
       if (memberPhoto) {
@@ -278,7 +270,6 @@ function updateHeaderProfileUI() {
       `;
     }
   } else {
-    if (logoutBtn) logoutBtn.classList.add('hidden');
     if (profileBtn) {
       profileBtn.innerHTML = '<span id="header-profile-icon" class="material-symbols-outlined text-[20px]">person</span>';
     }
@@ -1495,6 +1486,64 @@ function renderRolesScreen() {
   const tr = STATE.translations[STATE.lang] || {};
   const regTr = tr.registration || {};
   const rolesTr = tr.roles || {};
+  const appTr = tr.application || {};
+
+  // If member is already registered / logged in, lock role selection
+  if (STATE.member && STATE.member.code) {
+    const status = STATE.member.status || 'Pending';
+    const isApproved = (status === 'Approved');
+    const memberRole = rolesTr[STATE.member.type] || {};
+    const pendingRole = STATE.member.details?.requestedRole;
+
+    container.innerHTML = `
+      <div class="flex flex-col w-full pb-28 pt-4 max-w-[500px] mx-auto px-4 space-y-4">
+        <!-- Application Lock Status Card -->
+        <div class="bg-[#FFFDF8] rounded-2xl p-5 shadow-sm border border-[#E2DAC8] text-center space-y-3">
+          <div class="w-16 h-16 rounded-full ${isApproved ? 'bg-[#0E5C56]/15 text-[#00433E]' : 'bg-[#835400]/15 text-[#835400]'} flex items-center justify-center mx-auto">
+            <span class="material-symbols-outlined text-[32px]">${isApproved ? 'verified' : 'lock_clock'}</span>
+          </div>
+
+          <div>
+            <span class="text-[10.5px] uppercase tracking-wider font-bold text-[#835400]">${appTr.formLockedSub || 'One Citizen • One Role Protocol'}</span>
+            <h3 class="text-base font-bold text-[#1E1B18] mt-0.5">${appTr.formLockedHeading || 'Application Submitted & Locked'}</h3>
+          </div>
+
+          <!-- Active Registered Role Details -->
+          <div class="bg-[#FAF2ED] p-3.5 rounded-xl border border-[#E2DAC8] text-left space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-[#3F4947] font-semibold">${appTr.lockedRoleLabel || 'Registered Role:'}</span>
+              <span class="font-bold text-[#00433E] font-mono px-2 py-0.5 rounded bg-[#FFFDF8] border border-[#E2DAC8]">${STATE.member.type}</span>
+            </div>
+            <div class="text-sm font-bold text-[#1E1B18]">${memberRole.title || STATE.member.type}</div>
+            <div class="text-xs text-[#835400] font-semibold">${memberRole.odiaTitle || ''}</div>
+            <div class="text-[11px] text-[#3F4947] pt-1 border-t border-[#E2DAC8]/60">${memberRole.desc || ''}</div>
+          </div>
+
+          ${pendingRole ? `
+            <div class="bg-[#FFF8F4] p-2.5 rounded-lg border border-[#FEB64E] text-xs text-left">
+              <span class="font-bold text-[#835400] flex items-center gap-1">
+                <span class="material-symbols-outlined text-[15px]">pending_actions</span>
+                Role Change Pending Admin Approval
+              </span>
+              <p class="text-[#3F4947] mt-0.5">Requested to switch to <strong>${pendingRole}</strong>. Your current role remains active until approved.</p>
+            </div>
+          ` : ''}
+
+          <p class="text-xs text-[#3F4947] leading-relaxed">
+            ${appTr.formLockedDesc || 'You have already registered for an official OSD role. One citizen may only submit one application. Role changes and form re-submissions are restricted while your application is under administrative review or active.'}
+          </p>
+
+          <div class="pt-2">
+            <button onclick="navigateTo('dashboard')" class="w-full py-3 px-4 bg-[#00433E] hover:bg-[#0E5C56] text-white rounded-xl font-bold text-xs shadow flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all">
+              <span class="material-symbols-outlined text-[18px]">badge</span>
+              <span>${appTr.viewDashboardBtn || 'Go to Member Dashboard'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
 
   const publicRoleKeys = [
     'OSD-VOL',
@@ -1621,8 +1670,51 @@ function renderApplyScreen() {
   const tr = STATE.translations[STATE.lang] || {};
   const appTr = tr.application || {};
   const rolesTr = tr.roles || {};
-  const currentRole = rolesTr[STATE.selectedRole] || {};
 
+  // If member is already registered / logged in, lock form
+  if (STATE.member && STATE.member.code) {
+    const status = STATE.member.status || 'Pending';
+    const isApproved = (status === 'Approved');
+    const memberRole = rolesTr[STATE.member.type] || {};
+
+    container.innerHTML = `
+      <div class="flex flex-col w-full pb-28 pt-4 max-w-[500px] mx-auto px-4 space-y-4">
+        <div class="bg-[#FFFDF8] rounded-2xl p-5 shadow-sm border border-[#E2DAC8] text-center space-y-3">
+          <div class="w-16 h-16 rounded-full ${isApproved ? 'bg-[#0E5C56]/15 text-[#00433E]' : 'bg-[#835400]/15 text-[#835400]'} flex items-center justify-center mx-auto">
+            <span class="material-symbols-outlined text-[32px]">${isApproved ? 'verified' : 'lock_clock'}</span>
+          </div>
+
+          <div>
+            <span class="text-[10.5px] uppercase tracking-wider font-bold text-[#835400]">${appTr.formLockedSub || 'One Citizen • One Role Protocol'}</span>
+            <h3 class="text-base font-bold text-[#1E1B18] mt-0.5">${appTr.formLockedHeading || 'Application Submitted & Locked'}</h3>
+          </div>
+
+          <div class="bg-[#FAF2ED] p-3.5 rounded-xl border border-[#E2DAC8] text-left space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-[#3F4947] font-semibold">${appTr.lockedRoleLabel || 'Registered Role:'}</span>
+              <span class="font-bold text-[#00433E] font-mono px-2 py-0.5 rounded bg-[#FFFDF8] border border-[#E2DAC8]">${STATE.member.type}</span>
+            </div>
+            <div class="text-sm font-bold text-[#1E1B18]">${memberRole.title || STATE.member.type}</div>
+            <div class="text-xs text-[#835400] font-semibold">${memberRole.odiaTitle || ''}</div>
+          </div>
+
+          <p class="text-xs text-[#3F4947] leading-relaxed">
+            ${appTr.formLockedDesc || 'You have already registered for an official OSD role. One citizen may only submit one application. Role changes and form re-submissions are restricted while your application is under administrative review or active.'}
+          </p>
+
+          <div class="pt-2">
+            <button onclick="navigateTo('dashboard')" class="w-full py-3 px-4 bg-[#00433E] hover:bg-[#0E5C56] text-white rounded-xl font-bold text-xs shadow flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all">
+              <span class="material-symbols-outlined text-[18px]">badge</span>
+              <span>${appTr.viewDashboardBtn || 'Go to Member Dashboard'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const currentRole = rolesTr[STATE.selectedRole] || {};
   const isExecutiveRole = (STATE.selectedRole === 'OSD-FC' || STATE.selectedRole === 'OSD-PE');
 
   container.innerHTML = `
@@ -2213,6 +2305,11 @@ function removeRegistrationPhoto() {
 
 // Handle Registration Submission (action: register)
 async function handleRegisterSubmit() {
+  if (STATE.member && STATE.member.code) {
+    showToast(t('alerts.alreadyRegistered', 'You have already submitted an application. One application per citizen is permitted.'), 'warning');
+    navigateTo('dashboard');
+    return;
+  }
   const name = document.getElementById('reg-name')?.value.trim();
   const phone = document.getElementById('reg-phone')?.value.trim();
   const email = document.getElementById('reg-email')?.value.trim();
@@ -2356,6 +2453,7 @@ function renderDashboardScreen() {
   const container = document.getElementById('screen-content');
   const tr = STATE.translations[STATE.lang] || {};
   const dashTr = tr.dashboard || {};
+  const rolesTr = tr.roles || {};
 
   // If not logged in, show Member Login Form
   if (!STATE.memberToken || !STATE.member) {
@@ -2456,8 +2554,113 @@ function renderDashboardScreen() {
         ` : ''}
       </div>
 
-      <!-- Digital ID Card Section (Gated on Approved Members with Photo) -->
-      ${(isApproved && !hasPhoto) ? `
+      <!-- Official OSD Broadcast Channels & Copy Phone Helper Card -->
+      <div id="osd-broadcast-channels-card" class="bg-[#FFFDF8] rounded-xl p-4 shadow-sm border border-[#E2DAC8] space-y-3">
+        <div class="flex items-start gap-2.5">
+          <div class="w-9 h-9 rounded-lg bg-[#00433E]/10 text-[#00433E] flex items-center justify-center flex-shrink-0 mt-0.5">
+            <span class="material-symbols-outlined text-[20px]">campaign</span>
+          </div>
+          <div class="min-w-0">
+            <h4 class="text-xs font-bold text-[#1E1B18] uppercase tracking-wide">
+              ${dashTr.channelsHeading || 'Official OSD Broadcast Channels'}
+            </h4>
+            <p class="text-[11px] text-[#3F4947] mt-0.5 leading-snug">
+              ${dashTr.channelsSub || 'Join our verified WhatsApp and Telegram channels for daily grassroots alerts, district directives, and community updates.'}
+            </p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 pt-0.5">
+          <!-- WhatsApp Channel One-Tap Button -->
+          <a href="https://whatsapp.com/channel/0029VbD0nRkI1rcak5DUSt3j" target="_blank" rel="noopener noreferrer" class="py-2.5 px-2.5 rounded-xl bg-[#25D366] hover:bg-[#1EBE5D] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all text-center">
+            <svg class="w-4 h-4 fill-current flex-shrink-0" viewBox="0 0 24 24">
+              <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766 0-3.18-2.587-5.771-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86.173.086.275.072.376-.044.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.043.073.043.419-.101.824z"/>
+            </svg>
+            <span class="truncate">${dashTr.joinWhatsApp || 'Join WhatsApp'}</span>
+          </a>
+
+          <!-- Telegram Channel One-Tap Button -->
+          <a href="https://t.me/OSDOffice" target="_blank" rel="noopener noreferrer" class="py-2.5 px-2.5 rounded-xl bg-[#229ED9] hover:bg-[#1E88E5] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all text-center">
+            <svg class="w-4 h-4 fill-current flex-shrink-0" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+            </svg>
+            <span class="truncate">${dashTr.joinTelegram || 'Join Telegram'}</span>
+          </a>
+        </div>
+
+        <!-- Copy Registered Phone Number Helper -->
+        <div class="bg-[#FAF2ED] p-2.5 rounded-lg border border-[#E2DAC8] flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="material-symbols-outlined text-[17px] text-[#835400] flex-shrink-0">call</span>
+            <div class="min-w-0">
+              <span class="text-[9.5px] text-[#3F4947] block font-medium leading-none">${dashTr.registeredPhoneLabel || 'Registered Mobile:'}</span>
+              <span class="text-xs font-bold text-[#1E1B18] font-mono leading-tight truncate block mt-0.5">+91 ${member.phone || '-'}</span>
+            </div>
+          </div>
+          <button id="copy-phone-btn" type="button" onclick="copyRegisteredPhone('${member.phone || ''}')" class="px-2.5 py-1.5 rounded-lg bg-[#FFFDF8] hover:bg-[#EEE7E1] text-[11px] font-bold text-[#00433E] border border-[#E2DAC8] flex items-center gap-1 active:scale-95 transition-all flex-shrink-0">
+            <span class="material-symbols-outlined text-[14px]">content_copy</span>
+            <span id="copy-phone-text">${dashTr.copyPhoneBtn || 'Copy Number'}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Digital ID Card Section: STRICTLY GATED -->
+      ${!isApproved ? `
+        <!-- Locked ID Card Issuance: Under Verification -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between px-1">
+            <div>
+              <h3 class="text-sm font-bold text-[#1E1B18]">${dashTr.idCardHeading || 'Digital Identity Card'}</h3>
+              <p class="text-[10px] text-[#3F4947]">${dashTr.idCardSub || 'QR-verified canvas credential'}</p>
+            </div>
+            <span class="text-[10px] bg-[#835400]/15 text-[#835400] font-bold px-2 py-0.5 rounded-full border border-[#835400]/30 flex items-center gap-1">
+              <span class="material-symbols-outlined text-[11px]">lock</span>
+              Issuance Locked
+            </span>
+          </div>
+
+          <div class="bg-[#FFFDF8] rounded-2xl p-5 shadow-sm border border-[#E2DAC8] space-y-3.5 text-center">
+            <div class="w-14 h-14 rounded-full bg-[#835400]/10 text-[#835400] flex items-center justify-center mx-auto border border-[#E8A33D]/40">
+              <span class="material-symbols-outlined text-[28px]">lock_clock</span>
+            </div>
+            <div>
+              <h4 class="text-sm font-bold text-[#1E1B18]">${dashTr.idCardLockedHeading || 'ID Card Issuance Locked • Pending Verification'}</h4>
+              <p class="text-xs text-[#3F4947] mt-1 leading-relaxed max-w-sm mx-auto">
+                ${dashTr.idCardLockedDesc || 'Your official OSD Digital ID Card will be issued immediately upon verification and approval by the administrative council.'}
+              </p>
+            </div>
+
+            <!-- Advance Photo Upload for Immediate Issuance Upon Approval -->
+            <input type="file" id="member-photo-file-input" accept="image/*,image/jpeg,image/png,image/webp" class="sr-only" style="position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;" onchange="handleMemberPhotoUpload(this)" onclick="this.value=null;">
+            
+            ${hasPhoto ? `
+              <div class="bg-[#FAF2ED] p-3 rounded-xl border border-[#0E5C56]/30 text-center space-y-2 max-w-sm mx-auto">
+                <div class="flex items-center justify-center gap-1.5 text-xs font-bold text-[#0E5C56]">
+                  <span class="material-symbols-outlined text-[16px]">check_circle</span>
+                  <span>${dashTr.photoUploadedReadyBadge || 'Passport photo uploaded — ready for issuance upon approval'}</span>
+                </div>
+                <div>
+                  <button type="button" onclick="triggerPhotoPicker('member-photo-file-input')" class="text-xs text-[#00433E] font-bold hover:underline inline-flex items-center gap-1 py-1 px-3 rounded-lg bg-white border border-[#E2DAC8] active:scale-95 transition-all">
+                    <span class="material-symbols-outlined text-[14px]">edit</span>
+                    <span>${dashTr.changePhotoBtn || 'Change Photo'}</span>
+                  </button>
+                </div>
+              </div>
+            ` : `
+              <div class="bg-[#FAF2ED] p-3 rounded-xl border border-[#E8A33D]/40 text-center space-y-2 max-w-sm mx-auto">
+                <p class="text-xs font-semibold text-[#835400]">
+                  ${dashTr.idCardUploadAdvanceTip || 'Upload your passport photo in advance so your verified credential is generated immediately upon approval.'}
+                </p>
+                <button type="button" onclick="triggerPhotoPicker('member-photo-file-input')" class="py-2.5 px-4 bg-[#FEB64E] hover:bg-[#E8A33D] text-[#714800] rounded-xl font-bold text-xs inline-flex items-center gap-1.5 active:scale-95 transition-all shadow-xs">
+                  <span class="material-symbols-outlined text-[17px]">photo_camera</span>
+                  <span>${dashTr.uploadPhotoBtn || 'Upload Passport Photo'}</span>
+                </button>
+              </div>
+            `}
+          </div>
+        </div>
+      ` : (!hasPhoto) ? `
+        <!-- Approved Member: Photo Upload Required Before Issuance -->
         <div class="space-y-2">
           <div class="flex items-center justify-between px-1">
             <div>
@@ -2497,14 +2700,15 @@ function renderDashboardScreen() {
           </div>
         </div>
       ` : `
+        <!-- Approved Member with Photo: Active Digital ID Card -->
         <div class="space-y-2">
           <div class="flex items-center justify-between px-1">
             <div>
               <h3 class="text-sm font-bold text-[#1E1B18]">${dashTr.idCardHeading || 'Digital Identity Card'}</h3>
               <p class="text-[10px] text-[#3F4947]">${dashTr.idCardSub || 'QR-verified canvas credential'}</p>
             </div>
-            <span class="text-[10px] bg-[#0E5C56]/10 text-[#00433E] font-bold px-2 py-0.5 rounded-full">
-              ${isApproved ? 'Active' : 'Preview'}
+            <span class="text-[10px] bg-[#ABEFE7] text-[#00201D] font-bold px-2 py-0.5 rounded-full border border-[#0E5C56]">
+              Active Official Credential
             </span>
           </div>
 
@@ -2518,28 +2722,14 @@ function renderDashboardScreen() {
 
           <!-- Upload / Change Photo Option -->
           <input type="file" id="member-photo-file-input" accept="image/*,image/jpeg,image/png,image/webp" class="sr-only" style="position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;" onchange="handleMemberPhotoUpload(this)" onclick="this.value=null;">
-          ${hasPhoto ? `
-            <div class="text-center pt-0.5">
-              <label for="member-photo-file-input" class="inline-block cursor-pointer">
-                <button type="button" onclick="triggerPhotoPicker('member-photo-file-input')" class="text-xs text-[#00433E] font-bold hover:underline inline-flex items-center gap-1 py-1 px-3 rounded-lg bg-[#FAF2ED] border border-[#E2DAC8] active:scale-95 transition-all">
-                  <span class="material-symbols-outlined text-[15px]">edit</span>
-                  <span>${dashTr.changePhotoBtn || 'Change Photo'}</span>
-                </button>
-              </label>
-            </div>
-          ` : `
-            <div class="bg-[#FAF2ED] p-3 rounded-xl border border-[#E8A33D]/40 text-center space-y-1.5">
-              <p class="text-xs font-semibold text-[#835400]">
-                Upload your passport photo now so your ID card can be generated immediately once approved.
-              </p>
-              <label for="member-photo-file-input" class="inline-block cursor-pointer">
-                <button type="button" onclick="triggerPhotoPicker('member-photo-file-input')" class="py-2 px-3 bg-[#00433E] hover:bg-[#0E5C56] text-white rounded-lg font-bold text-xs inline-flex items-center gap-1.5 active:scale-95 transition-all shadow-xs">
-                  <span class="material-symbols-outlined text-[16px]">photo_camera</span>
-                  <span>${dashTr.uploadPhotoBtn || 'Upload Passport Photo'}</span>
-                </button>
-              </label>
-            </div>
-          `}
+          <div class="text-center pt-0.5">
+            <label for="member-photo-file-input" class="inline-block cursor-pointer">
+              <button type="button" onclick="triggerPhotoPicker('member-photo-file-input')" class="text-xs text-[#00433E] font-bold hover:underline inline-flex items-center gap-1 py-1 px-3 rounded-lg bg-[#FAF2ED] border border-[#E2DAC8] active:scale-95 transition-all">
+                <span class="material-symbols-outlined text-[15px]">edit</span>
+                <span>${dashTr.changePhotoBtn || 'Change Photo'}</span>
+              </button>
+            </label>
+          </div>
 
           <!-- Action Buttons for ID Card -->
           <div class="grid grid-cols-2 gap-2 pt-1">
@@ -2555,6 +2745,92 @@ function renderDashboardScreen() {
           <p class="text-[10px] text-center text-[#3F4947]">${dashTr.pressToSaveNotice || 'Tip: Tap and hold image on mobile to save directly.'}</p>
         </div>
       `}
+
+      <!-- Civic Role & Designation / Role Change Section (For Approved Members) -->
+      ${isApproved ? `
+        <div class="bg-[#FFFDF8] rounded-xl p-4 shadow-sm border border-[#E2DAC8] space-y-3">
+          <div class="flex items-center justify-between border-b border-[#EEE7E1] pb-2">
+            <h4 class="text-xs font-bold text-[#00433E] uppercase tracking-wide flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-[17px]">military_tech</span>
+              <span>${dashTr.roleSectionHeading || 'Civic Role & Designation'}</span>
+            </h4>
+            <span class="bg-[#0E5C56]/10 text-[#00433E] text-[10px] font-bold px-2 py-0.5 rounded-full border border-[#0E5C56]/20">
+              ${member.type}
+            </span>
+          </div>
+
+          <div class="flex items-center justify-between text-xs">
+            <div>
+              <span class="text-[10px] text-[#3F4947] block font-medium">${dashTr.currentApprovedRole || 'Current Approved Role:'}</span>
+              <span class="font-bold text-[#1E1B18] text-sm">${rolesTr[member.type]?.title || member.type}</span>
+              <span class="text-xs text-[#835400] font-semibold block">${rolesTr[member.type]?.odiaTitle || ''}</span>
+            </div>
+          </div>
+
+          ${(member.details?.requestedRole && member.details?.roleChangeStatus === 'Pending Approval') ? `
+            <!-- Pending Role Change Alert -->
+            <div class="bg-[#FFF8F4] p-3 rounded-xl border border-[#FEB64E] space-y-1.5">
+              <div class="flex items-center gap-1.5 text-xs font-bold text-[#835400]">
+                <span class="material-symbols-outlined text-[17px] animate-spin">sync</span>
+                <span>${dashTr.roleChangePendingTitle || 'Role Change Request Pending Admin Approval'}</span>
+              </div>
+              <p class="text-xs text-[#3F4947] leading-relaxed">
+                ${(dashTr.roleChangePendingDesc || 'You requested to switch to {role}. Your current role remains active and official until approved by the council.').replace('{role}', `<strong>${member.details.requestedRole}</strong>`)}
+              </p>
+              ${member.details?.roleChangeReason ? `
+                <p class="text-[11px] text-[#1E1B18] italic bg-white/60 p-2 rounded-lg border border-[#E2DAC8]">
+                  "${member.details.roleChangeReason}"
+                </p>
+              ` : ''}
+            </div>
+          ` : `
+            <!-- Request Role Change Collapsible Form -->
+            <div class="pt-1">
+              <button id="role-change-toggle-btn" type="button" onclick="toggleRoleChangeForm()" class="w-full py-2 px-3 rounded-lg bg-[#FAF2ED] hover:bg-[#EEE7E1] text-[#00433E] font-bold text-xs border border-[#E2DAC8] flex items-center justify-between active:scale-[0.99] transition-all">
+                <span class="flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[16px] text-[#835400]">swap_horiz</span>
+                  <span>${dashTr.requestRoleChangeBtn || 'Request Role Change (Requires Admin Approval)'}</span>
+                </span>
+                <span id="role-change-toggle-icon" class="material-symbols-outlined text-[16px]">expand_more</span>
+              </button>
+
+              <form id="role-change-form" onsubmit="event.preventDefault(); handleRoleChangeSubmit();" class="hidden space-y-2.5 pt-2.5">
+                <div>
+                  <label class="block text-[11px] font-bold text-[#1E1B18] mb-1">
+                    ${dashTr.selectTargetRoleLabel || 'Select Desired New Role *'}
+                  </label>
+                  <select id="role-change-target" required class="w-full h-9 px-2 rounded-lg bg-[#FAF2ED] text-xs font-bold text-[#1E1B18] border border-[#E2DAC8] focus:bg-white focus:outline-none focus:border-[#00433E]">
+                    <option value="">-- Choose New Role --</option>
+                    ${['OSD-VOL', 'OSD-PM', 'OSD-AM', 'OSD-COORD', 'OSD-LDR', 'OSD-SUP', 'OSD-FC', 'OSD-PE'].filter(k => k !== member.type).map(rKey => `
+                      <option value="${rKey}">${rolesTr[rKey]?.title || rKey} (${rKey})</option>
+                    `).join('')}
+                  </select>
+                </div>
+
+                <div>
+                  <label class="block text-[11px] font-bold text-[#1E1B18] mb-1">
+                    ${dashTr.roleChangeReasonLabel || 'Reason for Requesting Role Change *'}
+                  </label>
+                  <textarea id="role-change-reason" required rows="2" placeholder="${dashTr.roleChangeReasonPlaceholder || 'Explain why you wish to change your role and how you will serve in the new capacity...'}" class="w-full p-2 rounded-lg bg-[#FAF2ED] text-xs text-[#1E1B18] border border-[#E2DAC8] focus:bg-white focus:outline-none focus:border-[#00433E]"></textarea>
+                </div>
+
+                <p class="text-[10px] text-[#3F4947] italic">
+                  ${dashTr.roleChangeNotice || 'Note: One citizen applies for one role. Role changes are reviewed and approved by the State Secretariat. Your current ID card remains active until approved.'}
+                </p>
+
+                <div class="flex gap-2 pt-1">
+                  <button id="role-change-submit-btn" type="submit" class="flex-1 py-2 bg-[#835400] text-white rounded-lg font-bold text-xs shadow active:scale-95 transition-all">
+                    ${dashTr.submitRoleChangeBtn || 'Submit Request for Admin Review'}
+                  </button>
+                  <button type="button" onclick="toggleRoleChangeForm()" class="px-3 py-2 bg-[#EEE7E1] text-[#1E1B18] rounded-lg font-bold text-xs">
+                    ${dashTr.cancelRoleChangeBtn || 'Cancel'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          `}
+        </div>
+      ` : ''}
 
       <!-- Recognition Certificate Section (Unlocked for Executive & Advisory roles) -->
       ${isExecutive ? `
@@ -2658,12 +2934,12 @@ function renderDashboardScreen() {
     </div>
   `;
 
-  // Draw the Digital ID Card & Certificate right after DOM is ready
+  // Draw the Digital ID Card & Certificate right after DOM is ready (gated on approval)
   setTimeout(() => {
-    if (hasPhoto || !isApproved) {
+    if (isApproved && hasPhoto) {
       drawDigitalIdCard(member, memberPhoto);
     }
-    if (isExecutive) {
+    if (isExecutive && isApproved) {
       drawRecognitionCertificate(member);
     }
   }, 100);
@@ -2781,6 +3057,112 @@ async function handleMemberLogout() {
   updateHeaderProfileUI();
   showToast(t('alerts.logoutSuccess', 'Logged out successfully.'), 'info');
   navigateTo('dashboard');
+}
+
+// Copy Registered Phone Helper for Broadcast Channels
+function copyRegisteredPhone(phone) {
+  if (!phone) return;
+  const numToCopy = phone.startsWith('+91') ? phone : ('+91' + phone);
+  if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(numToCopy).then(() => {
+      showToast(t('alerts.phoneCopied', 'Registered mobile number copied to clipboard!'), 'success');
+      const btnText = document.getElementById('copy-phone-text');
+      if (btnText) {
+        const orig = btnText.textContent;
+        btnText.textContent = t('dashboard.phoneCopiedNotice', 'Copied!');
+        setTimeout(() => { if (btnText) btnText.textContent = orig; }, 2000);
+      }
+    }).catch(() => {
+      fallbackCopyText(numToCopy);
+    });
+  } else {
+    fallbackCopyText(numToCopy);
+  }
+}
+
+function fallbackCopyText(text) {
+  try {
+    const input = document.createElement('input');
+    input.setAttribute('value', text);
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand('copy');
+    document.body.removeChild(input);
+    showToast(t('alerts.phoneCopied', 'Registered mobile number copied to clipboard!'), 'success');
+  } catch (e) {
+    showToast('Phone: ' + text, 'info');
+  }
+}
+
+// Toggle Role Change Request Form
+function toggleRoleChangeForm() {
+  const form = document.getElementById('role-change-form');
+  const icon = document.getElementById('role-change-toggle-icon');
+  if (!form) return;
+  const isHidden = form.classList.contains('hidden');
+  if (isHidden) {
+    form.classList.remove('hidden');
+    if (icon) icon.textContent = 'expand_less';
+  } else {
+    form.classList.add('hidden');
+    if (icon) icon.textContent = 'expand_more';
+  }
+}
+
+// Handle Role Change Request Submission
+async function handleRoleChangeSubmit() {
+  if (!STATE.member || !STATE.memberToken) {
+    showToast(t('alerts.loginFailed', 'Please log in to submit a role change request.'), 'error');
+    return;
+  }
+  const targetRole = document.getElementById('role-change-target')?.value;
+  const reason = document.getElementById('role-change-reason')?.value.trim();
+
+  if (!targetRole || targetRole === STATE.member.type) {
+    showToast(t('alerts.roleChangeSelectRole', 'Please select a different target role.'), 'error');
+    return;
+  }
+  if (!reason || reason.length < 5) {
+    showToast(t('alerts.roleChangeReasonRequired', 'Please provide a reason for the role change request.'), 'error');
+    return;
+  }
+
+  const btn = document.getElementById('role-change-submit-btn');
+  const originalHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">sync</span> <span>Submitting...</span>';
+  }
+
+  const payload = {
+    requestedRole: targetRole,
+    roleChangeReason: reason,
+    roleChangeStatus: 'Pending Approval',
+    roleChangeDate: new Date().toISOString()
+  };
+
+  const res = await apiCall('updateMyProfile', payload, STATE.memberToken);
+
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = originalHtml;
+  }
+
+  if (res && res.success) {
+    if (!STATE.member.details) STATE.member.details = {};
+    STATE.member.details.requestedRole = targetRole;
+    STATE.member.details.roleChangeReason = reason;
+    STATE.member.details.roleChangeStatus = 'Pending Approval';
+    STATE.member.details.roleChangeDate = payload.roleChangeDate;
+    if (res.member) {
+      STATE.member = { ...STATE.member, ...res.member, details: { ...STATE.member.details, ...(res.member.details || {}) } };
+    }
+    localStorage.setItem('osd_member', JSON.stringify(STATE.member));
+    showToast(t('alerts.roleChangeSubmitted', 'Role change request submitted for administrative approval.'), 'success');
+    renderDashboardScreen();
+  } else {
+    showToast(res && res.error ? res.error : 'Failed to submit role change request.', 'error');
+  }
 }
 
 // Update Profile (action: updateMyProfile)
@@ -3555,6 +3937,19 @@ async function openApplicantDossier(code) {
           Save Status Update
         </button>
       </div>
+
+      ${app.details?.requestedRole ? `
+        <!-- Role Change Request Notice in Admin Dossier -->
+        <div class="bg-[#FFF8F4] p-3 rounded-lg border border-[#FEB64E] text-xs space-y-1">
+          <div class="flex items-center gap-1 font-bold text-[#835400]">
+            <span class="material-symbols-outlined text-[16px]">pending_actions</span>
+            <span>Applicant Requested Role Change:</span>
+          </div>
+          <p class="text-[#1E1B18]">Requested Target: <strong class="font-mono bg-white px-1.5 py-0.5 rounded border border-[#E2DAC8]">${app.details.requestedRole}</strong></p>
+          ${app.details?.roleChangeReason ? `<p class="text-[#3F4947] italic">"${app.details.roleChangeReason}"</p>` : ''}
+          <p class="text-[10px] text-[#835400] font-semibold">Select this role below and click "Reassign Role & Approve" to grant approval.</p>
+        </div>
+      ` : ''}
 
       <!-- Action 2: Change Category / Role (adminChangeCategory, includes OSD-AC) -->
       <div class="bg-[#FFFDF8] p-3 rounded-lg border border-[#835400]/40 space-y-2">

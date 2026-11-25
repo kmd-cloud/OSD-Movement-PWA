@@ -309,7 +309,12 @@
     "photoUploadBtn": "Choose Photo",
     "photoChangeBtn": "Change Photo",
     "photoRemoveBtn": "Remove Photo",
-    "photoOptionalNotice": "Recommended now. Required before approved ID card is issued."
+    "photoOptionalNotice": "Recommended now. Required before approved ID card is issued.",
+    "formLockedHeading": "Application Submitted & Locked",
+    "formLockedSub": "One Citizen • One Role Protocol",
+    "formLockedDesc": "You have already registered for an official OSD role. One citizen may only submit one application. Role changes and form re-submissions are restricted while your application is under administrative review or active.",
+    "viewDashboardBtn": "Go to Member Dashboard",
+    "lockedRoleLabel": "Registered Role:"
   },
   "dashboard": {
     "title": "Member Portal & Digital ID",
@@ -359,7 +364,30 @@
     "uploadPhotoBtn": "Upload Passport Photo",
     "changePhotoBtn": "Change Photo",
     "photoUploadedSuccess": "Photo uploaded and ID card issued successfully!",
-    "photoUploadTip": "Photo must be front-facing, clear, and well-lit. Supports camera and gallery."
+    "photoUploadTip": "Photo must be front-facing, clear, and well-lit. Supports camera and gallery.",
+    "idCardLockedHeading": "ID Card Issuance Locked • Pending Verification",
+    "idCardLockedDesc": "Your official OSD Digital ID Card will be issued immediately upon verification and approval by the administrative council.",
+    "idCardUploadAdvanceTip": "Upload your passport photo in advance so your verified credential is generated immediately upon approval.",
+    "photoUploadedReadyBadge": "Passport photo uploaded — ready for issuance upon approval",
+    "roleSectionHeading": "Civic Role & Designation",
+    "currentApprovedRole": "Current Approved Role:",
+    "roleChangePendingTitle": "Role Change Request Pending Admin Approval",
+    "roleChangePendingDesc": "You requested to switch to {role}. Your current role remains active and official until approved by the council.",
+    "requestRoleChangeBtn": "Request Role Change (Requires Admin Approval)",
+    "roleChangeFormTitle": "Submit Role Change Request",
+    "selectTargetRoleLabel": "Select Desired New Role *",
+    "roleChangeReasonLabel": "Reason for Requesting Role Change *",
+    "roleChangeReasonPlaceholder": "Explain why you wish to change your role and how you will serve in the new capacity...",
+    "submitRoleChangeBtn": "Submit Request for Admin Review",
+    "cancelRoleChangeBtn": "Cancel Request",
+    "roleChangeNotice": "Note: One citizen applies for one role. Role changes are reviewed and approved by the State Secretariat. Your current ID card remains active until approved.",
+    "channelsHeading": "Official OSD Broadcast Channels",
+    "channelsSub": "Join our verified WhatsApp and Telegram channels for daily grassroots civic alerts, directives, and community updates.",
+    "joinWhatsApp": "Join WhatsApp Channel",
+    "joinTelegram": "Join Telegram Channel",
+    "registeredPhoneLabel": "Registered Mobile:",
+    "copyPhoneBtn": "Copy Mobile Number",
+    "phoneCopiedNotice": "Copied!"
   },
   "idCard": {
     "orgTitle": "OSD Connect",
@@ -462,7 +490,13 @@
     "adminAuthSuccess": "Admin session authenticated successfully.",
     "adminFillRequired": "Username and password are required.",
     "adminLoggedOut": "Admin session terminated.",
-    "adminLoginFailed": "Invalid admin credentials or unauthorized account."
+    "adminLoginFailed": "Invalid admin credentials or unauthorized account.",
+    "alreadyRegistered": "You have already submitted an application. One application per citizen is permitted.",
+    "roleChangeSubmitted": "Role change request submitted for administrative approval.",
+    "roleChangePendingWarn": "A role change request is already pending approval.",
+    "roleChangeSelectRole": "Please select a different target role.",
+    "roleChangeReasonRequired": "Please provide a reason for the role change request.",
+    "phoneCopied": "Registered mobile number copied to clipboard!"
   },
   "header": {
     "logoutBtn": "Log Out",
