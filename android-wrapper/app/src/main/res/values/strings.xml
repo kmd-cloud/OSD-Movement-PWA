@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">OSD Connect</string>
+    <string name="default_web_url">https://kmd-cloud.github.io/OSD-Movement-PWA/</string>
+    <string name="chooser_title">Choose Photo or Camera</string>
+</resources>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary">#00433E</color>
+    <color name="primary_dark">#08403C</color>
+    <color name="accent">#E8A33D</color>
+    <color name="gold">#FEB64E</color>
+    <color name="maroon">#721926</color>
+    <color name="background">#FFFDF8</color>
+    <color name="status_bar">#00433E</color>
+</resources>
