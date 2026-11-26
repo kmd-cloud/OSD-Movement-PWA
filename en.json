@@ -500,7 +500,10 @@
     "roleChangePendingWarn": "A role change request is already pending approval.",
     "roleChangeSelectRole": "Please select a different target role.",
     "roleChangeReasonRequired": "Please provide a reason for the role change request.",
-    "phoneCopied": "Registered mobile number copied to clipboard!"
+    "phoneCopied": "Registered mobile number copied to clipboard!",
+    "photoInvalidFormat": "Please select a valid image file (JPG, PNG, WebP).",
+    "photoProcessing": "Processing and compressing photo...",
+    "photoTooLarge": "Selected photo is too large. Please select a photo under 25MB."
   },
   "header": {
     "logoutBtn": "Log Out",

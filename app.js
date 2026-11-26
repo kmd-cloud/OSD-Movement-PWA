@@ -427,22 +427,15 @@ function showToast(message, type = 'info') {
 
 
 // Helper to reliably trigger file input across mobile browsers & Android WebView
-// Helper to reliably trigger file input across mobile browsers & Android WebView
 function triggerPhotoPicker(inputId, ev) {
-  if (ev) {
-    if (typeof ev.preventDefault === 'function') ev.preventDefault();
-    if (typeof ev.stopPropagation === 'function') ev.stopPropagation();
+  if (ev && typeof ev.stopPropagation === 'function') {
+    ev.stopPropagation();
   }
   const input = document.getElementById(inputId);
   if (!input) {
     console.warn('triggerPhotoPicker: element not found:', inputId);
     return;
   }
-  // Clear value so selecting same file reliably triggers change
-  try {
-    input.value = '';
-  } catch (_) {}
-
   try {
     input.click();
   } catch (err) {
@@ -456,7 +449,7 @@ function triggerPhotoPicker(inputId, ev) {
 
 // ============================================================================
 // Client-Side Image Compression & Resizing Helper
-// Fast, memory-efficient (supports URL.createObjectURL + FileReader fallback)
+// Fast, memory-efficient (supports FileReader + direct Canvas downsampling)
 // ============================================================================
 function compressImage(file, maxWidth = 400, maxHeight = 400, quality = 0.82) {
   return new Promise((resolve, reject) => {
@@ -464,35 +457,32 @@ function compressImage(file, maxWidth = 400, maxHeight = 400, quality = 0.82) {
       return reject(new Error('No image file selected'));
     }
 
-    // Permissive check for Android WebView where file.type can be empty or generic
-    const isImage = (file.type && file.type.startsWith('image/')) ||
-                    (/\.(jpe?g|png|webp|bmp|gif|heic|heif|jfif|avif)$/i.test(file.name || '')) ||
-                    (!file.type && file.size > 0);
-    if (!isImage) {
-      return reject(new Error('Invalid image file format'));
+    // Permissive check: accept any file with size > 0 that is not an obvious non-media file
+    const fileName = (file.name || '').toLowerCase();
+    const isDisallowed = /\.(pdf|doc|docx|xls|xlsx|txt|zip|tar|gz|apk|exe|dmg|iso)$/i.test(fileName);
+    if (isDisallowed) {
+      return reject(new Error('Disallowed file format. Please choose an image.'));
     }
 
-    let objectUrl = null;
-    let isObjectUrl = false;
-    try {
-      if (typeof window !== 'undefined' && window.URL && typeof window.URL.createObjectURL === 'function') {
-        objectUrl = window.URL.createObjectURL(file);
-        isObjectUrl = true;
-      }
-    } catch (_) {
-      objectUrl = null;
+    if (file.size > 25 * 1024 * 1024) {
+      return reject(new Error('Image file is too large (max 25MB)'));
     }
 
-    const cleanup = () => {
-      if (isObjectUrl && objectUrl && window.URL && typeof window.URL.revokeObjectURL === 'function') {
-        try { window.URL.revokeObjectURL(objectUrl); } catch (_) {}
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Failed to read image file from disk'));
+    reader.onload = (e) => {
+      let dataUrl = e.target.result;
+      if (!dataUrl || typeof dataUrl !== 'string') {
+        return reject(new Error('Empty image payload'));
       }
-    };
 
-    const processImgSrc = (srcUrl) => {
+      // If mime type is generic (Android WebView application/octet-stream or empty), normalize to image/jpeg
+      if (dataUrl.startsWith('data:application/octet-stream') || dataUrl.startsWith('data:;')) {
+        dataUrl = dataUrl.replace(/^data:[^;]*/, 'data:image/jpeg');
+      }
+
       const img = new Image();
       img.onload = () => {
-        cleanup();
         let width = img.naturalWidth || img.width || 400;
         let height = img.naturalHeight || img.height || 400;
 
@@ -513,53 +503,34 @@ function compressImage(file, maxWidth = 400, maxHeight = 400, quality = 0.82) {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (!ctx) {
-          return reject(new Error('Canvas 2D context not available'));
+          return resolve(dataUrl);
         }
+
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
 
-        let dataUrl = '';
+        let result = '';
         try {
-          dataUrl = canvas.toDataURL('image/jpeg', quality);
+          result = canvas.toDataURL('image/jpeg', quality);
         } catch (_) {
           try {
-            dataUrl = canvas.toDataURL('image/png');
+            result = canvas.toDataURL('image/png');
           } catch (_) {
-            dataUrl = canvas.toDataURL();
+            result = dataUrl;
           }
         }
-        resolve(dataUrl);
+        resolve(result);
       };
 
       img.onerror = () => {
-        cleanup();
-        // If object URL failed, attempt FileReader fallback once
-        if (isObjectUrl) {
-          readViaFileReader();
-        } else {
-          reject(new Error('Failed to load image into canvas for compression'));
-        }
+        reject(new Error('Image could not be decoded'));
       };
 
-      img.src = srcUrl;
+      img.src = dataUrl;
     };
 
-    const readViaFileReader = () => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        isObjectUrl = false;
-        processImgSrc(e.target.result);
-      };
-      reader.onerror = () => reject(new Error('Failed to read image file from disk'));
-      reader.readAsDataURL(file);
-    };
-
-    if (objectUrl) {
-      processImgSrc(objectUrl);
-    } else {
-      readViaFileReader();
-    }
+    reader.readAsDataURL(file);
   });
 }
 
@@ -625,6 +596,7 @@ function drawDigitalIdCard(member, memberPhoto = '') {
 
   // Header Logo & Text
   const badgeImg = new Image();
+  badgeImg.crossOrigin = 'anonymous';
   badgeImg.src = './assets/osd-badge.png';
   badgeImg.onload = () => {
     ctx.drawImage(badgeImg, 32, 28, 64, 64);
@@ -751,6 +723,7 @@ function drawDigitalIdCard(member, memberPhoto = '') {
 
     function drawSignatureAndFinalize() {
       const sigImg = new Image();
+      sigImg.crossOrigin = 'anonymous';
       sigImg.src = './assets/signature.png';
       sigImg.onload = () => {
         ctx.drawImage(sigImg, 360, 360, 140, 45);
@@ -837,8 +810,17 @@ function drawDigitalIdCard(member, memberPhoto = '') {
 
       // Convert to crisp image for WebView press-and-hold & sharing without CORS taint
       if (imgTarget) {
-        imgTarget.src = canvas.toDataURL('image/png');
-        imgTarget.alt = 'OSD Connect Digital Identity Card';
+        try {
+          imgTarget.src = canvas.toDataURL('image/png');
+          imgTarget.alt = 'OSD Connect Digital Identity Card';
+        } catch (e) {
+          console.warn('ID card canvas toDataURL error (taint fallback):', e);
+          canvas.classList.remove('hidden');
+          canvas.className = 'w-full h-auto rounded-2xl shadow-lg border border-[#E8A33D]/40 block';
+          if (imgTarget.parentElement) {
+            imgTarget.parentElement.classList.add('hidden');
+          }
+        }
       }
     }
   }
@@ -1875,23 +1857,25 @@ function renderApplyScreen() {
               ${appTr.photoSub || 'Upload a clear front-facing photo for your official digital identity card.'}
             </p>
 
-            <!-- Accessible file input with reliable SR-only positioning -->
-            <input type="file" id="reg-photo-input" accept="image/*,image/jpeg,image/png,image/webp" class="sr-only" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0;" onchange="handleRegistrationPhotoSelect(this)">
-
             <div class="flex items-center gap-3">
-              <div id="reg-photo-preview-box" onclick="triggerPhotoPicker('reg-photo-input', event)" class="w-16 h-20 rounded-lg bg-[#FAF2ED] border-2 border-dashed border-[#E8A33D] flex flex-col items-center justify-center text-[#835400] overflow-hidden flex-shrink-0 cursor-pointer shadow-xs active:scale-95 transition-transform">
-                ${STATE.registrationPhoto 
-                  ? `<img src="${STATE.registrationPhoto}" alt="Member Photo" class="w-full h-full object-cover">`
-                  : `<span class="material-symbols-outlined text-[24px]">add_a_photo</span><span class="text-[8px] font-bold mt-0.5">Upload</span>`
-                }
-              </div>
+              <!-- Preview Box with Direct Native File Input Overlay -->
+              <label for="reg-photo-input" class="relative w-16 h-20 rounded-lg bg-[#FAF2ED] border-2 border-dashed border-[#E8A33D] flex flex-col items-center justify-center text-[#835400] overflow-hidden flex-shrink-0 cursor-pointer shadow-xs active:scale-95 transition-transform block">
+                <input type="file" id="reg-photo-input" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 z-30 cursor-pointer" onchange="handleRegistrationPhotoSelect(this)" title="Select Photo">
+                <div id="reg-photo-preview-box" class="w-full h-full flex flex-col items-center justify-center pointer-events-none">
+                  ${STATE.registrationPhoto 
+                    ? `<img src="${STATE.registrationPhoto}" alt="Member Photo" class="w-full h-full object-cover">`
+                    : `<span class="material-symbols-outlined text-[24px]">add_a_photo</span><span class="text-[8px] font-bold mt-0.5">Upload</span>`
+                  }
+                </div>
+              </label>
+
               <div class="flex-1 space-y-1">
-                <button type="button" onclick="triggerPhotoPicker('reg-photo-input', event)" class="py-2 px-3 rounded-lg bg-[#00433E] hover:bg-[#0E5C56] text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer">
-                  <span class="material-symbols-outlined text-[16px]">photo_camera</span>
-                  <span id="reg-photo-btn-text">${STATE.registrationPhoto ? (appTr.photoChangeBtn || 'Change Photo') : (appTr.photoUploadBtn || 'Select Photo')}</span>
-                </button>
+                <label for="reg-photo-input" class="relative py-2 px-3 rounded-lg bg-[#00433E] hover:bg-[#0E5C56] text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer">
+                  <span class="material-symbols-outlined text-[16px] pointer-events-none">photo_camera</span>
+                  <span id="reg-photo-btn-text" class="pointer-events-none">${STATE.registrationPhoto ? (appTr.photoChangeBtn || 'Change Photo') : (appTr.photoUploadBtn || 'Select Photo')}</span>
+                </label>
                 <div id="reg-photo-actions" class="${STATE.registrationPhoto ? '' : 'hidden'} flex items-center gap-2">
-                  <button type="button" onclick="removeRegistrationPhoto()" class="text-[11px] text-[#BA1A1A] font-semibold hover:underline">
+                  <button type="button" onclick="removeRegistrationPhoto()" class="text-[11px] text-[#BA1A1A] font-semibold hover:underline cursor-pointer">
                     ${appTr.photoRemoveBtn || 'Remove Photo'}
                   </button>
                 </div>
@@ -2318,7 +2302,7 @@ async function handleRegistrationPhotoSelect(input) {
   if (!input || !input.files || !input.files[0]) return;
   const file = input.files[0];
   try {
-    showToast(STATE.lang === 'or' ? 'ଫଟୋ ପ୍ରକ୍ରିୟାକରଣ ହେଉଛି...' : 'Compressing photo...', 'info');
+    showToast(t('alerts.photoProcessing', STATE.lang === 'or' ? 'ଫଟୋ ପ୍ରକ୍ରିୟାକରଣ ଚାଲିଛି...' : 'Compressing photo...'), 'info');
     const base64 = await compressImage(file, 400, 400, 0.82);
     STATE.registrationPhoto = base64;
     const previewBox = document.getElementById('reg-photo-preview-box');
@@ -2333,10 +2317,15 @@ async function handleRegistrationPhotoSelect(input) {
     if (actions) {
       actions.classList.remove('hidden');
     }
-    showToast(t('alerts.photoUploadedSuccess', 'Photo selected and compressed.'), 'info');
+    showToast(t('alerts.photoUploadedSuccess', 'Photo selected and compressed.'), 'success');
   } catch (err) {
     console.error('Registration photo error:', err);
-    showToast(t('alerts.photoSizeError', 'Image could not be processed.'), 'error');
+    const msg = (err && err.message && err.message.includes('Disallowed'))
+      ? t('alerts.photoInvalidFormat', 'Please select a valid image file (JPG, PNG, WebP).')
+      : (err && err.message && err.message.includes('large'))
+      ? t('alerts.photoTooLarge', 'Selected photo is too large. Please select a photo under 25MB.')
+      : t('alerts.photoSizeError', 'Image could not be processed. Please try another image.');
+    showToast(msg, 'error');
   } finally {
     if (input) input.value = '';
   }
@@ -2692,8 +2681,6 @@ function renderDashboardScreen() {
             </div>
 
             <!-- Advance Photo Upload for Immediate Issuance Upon Approval -->
-            <input type="file" id="member-photo-file-input" accept="image/*,image/jpeg,image/png,image/webp" class="sr-only" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0;" onchange="handleMemberPhotoUpload(this)">
-            
             ${hasPhoto ? `
               <div class="bg-[#FAF2ED] p-3 rounded-xl border border-[#0E5C56]/30 text-center space-y-2 max-w-sm mx-auto">
                 <div class="flex items-center justify-center gap-1.5 text-xs font-bold text-[#0E5C56]">
@@ -2701,10 +2688,11 @@ function renderDashboardScreen() {
                   <span>${dashTr.photoUploadedReadyBadge || 'Passport photo uploaded — ready for issuance upon approval'}</span>
                 </div>
                 <div>
-                  <button type="button" onclick="triggerPhotoPicker('member-photo-file-input', event)" class="text-xs text-[#00433E] font-bold hover:underline inline-flex items-center gap-1 py-1 px-3 rounded-lg bg-white border border-[#E2DAC8] active:scale-95 transition-all cursor-pointer">
-                    <span class="material-symbols-outlined text-[14px]">edit</span>
-                    <span>${dashTr.changePhotoBtn || 'Change Photo'}</span>
-                  </button>
+                  <label class="relative text-xs text-[#00433E] font-bold hover:underline inline-flex items-center gap-1 py-1.5 px-3 rounded-lg bg-white border border-[#E2DAC8] active:scale-95 transition-all cursor-pointer overflow-hidden">
+                    <input type="file" id="member-photo-file-input" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 z-30 cursor-pointer" onchange="handleMemberPhotoUpload(this)" title="Change Photo">
+                    <span class="material-symbols-outlined text-[14px] pointer-events-none">edit</span>
+                    <span class="pointer-events-none">${dashTr.changePhotoBtn || 'Change Photo'}</span>
+                  </label>
                 </div>
               </div>
             ` : `
@@ -2712,10 +2700,11 @@ function renderDashboardScreen() {
                 <p class="text-xs font-semibold text-[#835400]">
                   ${dashTr.idCardUploadAdvanceTip || 'Upload your passport photo in advance so your verified credential is generated immediately upon approval.'}
                 </p>
-                <button type="button" onclick="triggerPhotoPicker('member-photo-file-input', event)" class="py-2.5 px-4 bg-[#FEB64E] hover:bg-[#E8A33D] text-[#714800] rounded-xl font-bold text-xs inline-flex items-center gap-1.5 active:scale-95 transition-all shadow-xs cursor-pointer">
-                  <span class="material-symbols-outlined text-[17px]">photo_camera</span>
-                  <span>${dashTr.uploadPhotoBtn || 'Upload Passport Photo'}</span>
-                </button>
+                <label class="relative py-2.5 px-4 bg-[#FEB64E] hover:bg-[#E8A33D] text-[#714800] rounded-xl font-bold text-xs inline-flex items-center gap-1.5 active:scale-95 transition-all shadow-xs cursor-pointer overflow-hidden">
+                  <input type="file" id="member-photo-file-input" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 z-30 cursor-pointer" onchange="handleMemberPhotoUpload(this)" title="Upload Passport Photo">
+                  <span class="material-symbols-outlined text-[17px] pointer-events-none">photo_camera</span>
+                  <span class="pointer-events-none">${dashTr.uploadPhotoBtn || 'Upload Passport Photo'}</span>
+                </label>
               </div>
             `}
           </div>
@@ -2734,9 +2723,10 @@ function renderDashboardScreen() {
           </div>
 
           <div class="bg-[#FFFDF8] rounded-2xl p-5 shadow-sm border-2 border-dashed border-[#E8A33D] space-y-3.5 text-center">
-            <div class="w-16 h-16 rounded-full bg-[#FEB64E]/20 text-[#835400] flex items-center justify-center mx-auto border border-[#E8A33D] shadow-xs">
-              <span class="material-symbols-outlined text-[32px]">add_a_photo</span>
-            </div>
+            <label class="relative w-16 h-16 rounded-full bg-[#FEB64E]/20 text-[#835400] flex items-center justify-center mx-auto border border-[#E8A33D] shadow-xs cursor-pointer block overflow-hidden active:scale-95 transition-transform">
+              <input type="file" id="member-photo-file-input" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 z-30 cursor-pointer" onchange="handleMemberPhotoUpload(this)" title="Upload Passport Photo">
+              <span class="material-symbols-outlined text-[32px] pointer-events-none">add_a_photo</span>
+            </label>
             <div>
               <h4 class="text-sm font-bold text-[#1E1B18]">${dashTr.photoRequiredHeading || 'Passport Photo Required to Issue ID Card'}</h4>
               <p class="text-xs text-[#3F4947] mt-1 leading-relaxed max-w-sm mx-auto">
@@ -2744,14 +2734,12 @@ function renderDashboardScreen() {
               </p>
             </div>
 
-            <!-- Accessible file input with reliable SR-only positioning -->
-            <input type="file" id="member-photo-file-input" accept="image/*,image/jpeg,image/png,image/webp" class="sr-only" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0;" onchange="handleMemberPhotoUpload(this)">
-
             <div class="pt-1 max-w-xs mx-auto">
-              <button type="button" onclick="triggerPhotoPicker('member-photo-file-input', event)" class="w-full py-3 px-4 bg-[#FEB64E] hover:bg-[#E8A33D] text-[#714800] rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-all cursor-pointer">
-                <span class="material-symbols-outlined text-[20px]">photo_camera</span>
-                <span>${dashTr.uploadPhotoBtn || 'Upload Passport Photo'}</span>
-              </button>
+              <label class="relative w-full py-3 px-4 bg-[#FEB64E] hover:bg-[#E8A33D] text-[#714800] rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-all cursor-pointer overflow-hidden">
+                <input type="file" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 z-30 cursor-pointer" onchange="handleMemberPhotoUpload(this)" title="Upload Passport Photo">
+                <span class="material-symbols-outlined text-[20px] pointer-events-none">photo_camera</span>
+                <span class="pointer-events-none">${dashTr.uploadPhotoBtn || 'Upload Passport Photo'}</span>
+              </label>
               <p class="text-[10.5px] text-[#3F4947] mt-2">
                 ${dashTr.photoUploadTip || 'Photo must be front-facing, clear, and well-lit. Supports camera and gallery.'}
               </p>
@@ -2780,12 +2768,12 @@ function renderDashboardScreen() {
           </div>
 
           <!-- Upload / Change Photo Option -->
-          <input type="file" id="member-photo-file-input" accept="image/*,image/jpeg,image/png,image/webp" class="sr-only" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0;" onchange="handleMemberPhotoUpload(this)">
           <div class="text-center pt-0.5">
-            <button type="button" onclick="triggerPhotoPicker('member-photo-file-input', event)" class="text-xs text-[#00433E] font-bold hover:underline inline-flex items-center gap-1 py-1 px-3 rounded-lg bg-[#FAF2ED] border border-[#E2DAC8] active:scale-95 transition-all cursor-pointer">
-              <span class="material-symbols-outlined text-[15px]">edit</span>
-              <span>${dashTr.changePhotoBtn || 'Change Photo'}</span>
-            </button>
+            <label class="relative text-xs text-[#00433E] font-bold hover:underline inline-flex items-center gap-1 py-1.5 px-3 rounded-lg bg-[#FAF2ED] border border-[#E2DAC8] active:scale-95 transition-all cursor-pointer overflow-hidden">
+              <input type="file" id="member-photo-file-input" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 z-30 cursor-pointer" onchange="handleMemberPhotoUpload(this)" title="Change Photo">
+              <span class="material-symbols-outlined text-[15px] pointer-events-none">edit</span>
+              <span class="pointer-events-none">${dashTr.changePhotoBtn || 'Change Photo'}</span>
+            </label>
           </div>
 
           <!-- Action Buttons for ID Card -->
@@ -3102,7 +3090,7 @@ async function handleMemberPhotoUpload(input) {
   if (!input || !input.files || !input.files[0]) return;
   const file = input.files[0];
   try {
-    showToast(STATE.lang === 'or' ? 'ଫଟୋ ପ୍ରକ୍ରିୟାକରଣ ହେଉଛି...' : 'Compressing photo...', 'info');
+    showToast(t('alerts.photoProcessing', STATE.lang === 'or' ? 'ଫଟୋ ପ୍ରକ୍ରିୟାକରଣ ଚାଲିଛି...' : 'Compressing photo...'), 'info');
     const base64 = await compressImage(file, 400, 400, 0.82);
 
     if (STATE.member) {
@@ -3122,12 +3110,17 @@ async function handleMemberPhotoUpload(input) {
       });
     }
 
-    showToast(t('alerts.photoUploadedSuccess', 'Photo uploaded and ID card issued successfully!'), 'success');
+    showToast(t('alerts.photoUploadedSuccess', 'Photo uploaded and saved successfully!'), 'success');
     renderDashboardScreen();
     updateHeaderProfileUI();
   } catch (err) {
     console.error('Member photo upload error:', err);
-    showToast(t('alerts.photoSizeError', 'Image could not be processed. Please try another image.'), 'error');
+    const msg = (err && err.message && err.message.includes('Disallowed'))
+      ? t('alerts.photoInvalidFormat', 'Please select a valid image file (JPG, PNG, WebP).')
+      : (err && err.message && err.message.includes('large'))
+      ? t('alerts.photoTooLarge', 'Selected photo is too large. Please select a photo under 25MB.')
+      : t('alerts.photoSizeError', 'Image could not be processed. Please try another image.');
+    showToast(msg, 'error');
   } finally {
     if (input) input.value = '';
   }
